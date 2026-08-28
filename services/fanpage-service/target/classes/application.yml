@@ -21,8 +21,6 @@ spring:
     producer:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      properties:
-        spring.json.add.type.headers: false
 eureka:
   client:
     service-url:

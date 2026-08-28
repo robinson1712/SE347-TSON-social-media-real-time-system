@@ -89,12 +89,29 @@ Cần Postgres/MongoDB/Redis/Kafka/MinIO chạy sẵn (có thể `docker compose
 rồi chạy service bằng `mvn spring-boot:run` trong từng thư mục `services/<name>`), theo thứ tự:
 `eureka-server` → `config-server` → các business service → `api-gateway`.
 
-## Giới hạn hiện tại (đã thống nhất với người dùng khi lên kế hoạch)
+## Đã hoàn thiện thêm sau lượt scaffold đầu
 
-Đây là bộ khung production-grade về mặt kiến trúc nhưng logic nghiệp vụ ở mức cơ bản. Chưa có:
-feed ranking thông minh, thuật toán match dating nâng cao, kiểm duyệt nội dung, rate-limit chi
-tiết/circuit breaker (Resilience4j), test coverage, CI/CD, observability/tracing (Zipkin/OTel).
-Một vài đơn giản hoá có chủ đích (ghi rõ trong code bằng comment) để giữ phạm vi khả thi cho lượt
-scaffold đầu tiên, ví dụ: `reaction-service` nhận `targetOwnerId` trực tiếp từ client thay vì tự
-resolve qua Feign; `group-service`/`fanpage-service` list công khai chưa lọc private group mà user
-đã là thành viên.
+- **Feed ranking theo engagement** (`feed-service`): đọc feed không còn thuần sắp theo thời gian.
+  `FeedQueryService` lấy một pool ứng viên có giới hạn từ Redis, chấm điểm mỗi post bằng công thức
+  kiểu Hacker News (`recencyScore × (1 + log(1 + reaction + 2×comment))`), sắp theo điểm rồi mới
+  phân trang trong bộ nhớ. Ghi (fanout) vẫn chỉ ghi timestamp thuần — ranking chỉ tính lúc đọc, nên
+  đổi công thức không cần migrate dữ liệu.
+- **Thuật toán matching cho dating** (`dating-service`): `DatingProfile` có thêm `gender`/`birthDate`
+  riêng (khác với `genderPreference` là *đang tìm ai*). `GET /candidates` lọc tương thích giới tính
+  hai chiều rồi chấm điểm 0-100 (tối đa 60 điểm cho độ tuổi phù hợp hai chiều, 40 điểm cho sở thích
+  chung theo Jaccard similarity), trả về kèm điểm số qua `CandidateResponse` để minh bạch thuật toán.
+- **Group visibility đúng theo quyền thành viên** (`group-service`): `GET /api/groups` giờ trả cả
+  group PRIVATE mà caller đã là thành viên APPROVED, không chỉ group PUBLIC.
+- **Resilience4j circuit breaker** trên mọi Feign client (`comment-service`, `story-service`,
+  `feed-service`): mỗi `@FeignClient` có `fallbackFactory` riêng, phân biệt lỗi nghiệp vụ (404 —
+  vẫn báo lỗi đúng) với lỗi hạ tầng (service sập/timeout — trả `ServiceUnavailableException` 503
+  hoặc giá trị rỗng tuỳ ngữ cảnh). Xem trạng thái circuit qua `actuator/circuitbreakers`.
+
+## Giới hạn còn lại
+
+Chưa có: kiểm duyệt nội dung (content moderation), rate-limit chi tiết ở gateway, test coverage
+(unit/integration test), CI/CD pipeline, observability/tracing (Zipkin/OpenTelemetry). Một vài đơn
+giản hoá có chủ đích còn lại (ghi rõ trong code bằng comment): `reaction-service` nhận
+`targetOwnerId` trực tiếp từ client thay vì tự resolve qua Feign (tránh phải có 3 Feign client cho
+POST/COMMENT/REEL); `fanpage-service` không có khái niệm private page (đúng theo thiết kế — fanpage
+luôn công khai, không cần sửa như group).
