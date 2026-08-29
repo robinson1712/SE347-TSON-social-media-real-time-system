@@ -118,11 +118,14 @@ rồi chạy service bằng `mvn spring-boot:run` trong từng thư mục `servi
 - **CI/CD**: GitHub Actions (`.github/workflows/ci-cd.yml`) build+test toàn reactor, chạy
   Testcontainers integration test, build Docker image cho mọi service, push GHCR khi merge `main`.
 - **Content moderation** (`moderation-service`, port 8095): profanity filter tự động (tiếng Anh +
-  tiếng Việt, giữ nguyên dấu thanh) chặn `post-service`/`comment-service` lúc tạo/sửa nội dung; user
-  report nội dung vi phạm qua `POST /api/moderation/reports`; admin (role `ADMIN`) duyệt hàng đợi
-  qua `GET/POST /api/moderation/reports/...`, xử lý `REMOVE_CONTENT` sẽ publish sự kiện Kafka xoá
-  nội dung xuyên service. Set biến môi trường `ADMIN_EMAILS=admin@social.app,...` (comma-separated)
-  trước khi build `auth-service` để các email đó tự động có role `ADMIN` lúc đăng ký.
+  tiếng Việt, giữ nguyên dấu thanh) chặn `post-service`/`comment-service`/`reels-service`/
+  `story-service`/`group-service`/`fanpage-service` lúc tạo nội dung — đủ cả 6 loại nội dung trong hệ
+  thống; user report nội dung vi phạm qua `POST /api/moderation/reports`; admin (role `ADMIN`) duyệt
+  hàng đợi qua `GET /api/moderation/reports`, xử lý `PUT /api/moderation/reports/{id}/resolve` với
+  `REMOVE_CONTENT` sẽ publish sự kiện Kafka xoá nội dung xuyên service (`group-service`/
+  `fanpage-service` xoá cascade cả bảng thành viên/follower/admin liên quan). Set biến môi trường
+  `ADMIN_EMAILS=admin@social.app,...` (comma-separated) trước khi build `auth-service` để các email
+  đó tự động có role `ADMIN` lúc đăng ký.
 
 ## Giới hạn còn lại
 

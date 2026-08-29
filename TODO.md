@@ -105,7 +105,7 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 | `chat-service` | 8092 | ✅ Xong (WebSocket thật) | Chưa có: sửa/xoá tin nhắn, typing indicator, read-receipt chi tiết (hiện chỉ có mark-all-read) |
 | `notification-service` | 8093 | ✅ Xong (WebSocket thật) | Chưa có: push notification ra mobile (FCM/APNs), cài đặt loại thông báo |
 | `feed-service` | 8094 | ✅ Xong + engagement ranking | Chưa gộp story/reels vào cùng feed logic |
-| `moderation-service` | 8095 | ✅ Xong (report + admin review queue) | Chưa mở rộng sang reels/story/group/fanpage — chỉ post/comment nghe `ContentRemovedEvent` |
+| `moderation-service` | 8095 | ✅ Xong (report + admin review queue) | Đã mở rộng đủ 6 loại: post/comment/reels/story/group/fanpage đều nghe `ContentRemovedEvent` |
 
 **15/15 business service + 3/3 hạ tầng đều đã hoàn thành scaffold và build được** — không có service nào còn ở dạng rỗng/chưa code.
 
@@ -213,13 +213,57 @@ mới — phải tạo thủ công (`CREATE DATABASE moderation_db`) rồi resta
 trường dev cục bộ (volume tái sử dụng), không ảnh hưởng lúc `docker compose down -v` sạch hoặc deploy
 lần đầu.
 
+## ✅ Mở rộng content moderation sang reels/story/group/fanpage
+
+Áp dụng đúng pattern đã có ở post/comment cho 4 service còn lại trong danh sách `ReportTargetType`
+(POST/COMMENT/REEL/STORY/GROUP/FANPAGE — nay đã đủ 6/6, không còn service nào thiếu):
+
+- **Profanity filter lúc tạo nội dung**: `ReelService.createReel()` (field `caption`),
+  `StoryService.createStory()` (field `caption`, có thể null vì story chủ yếu là media — filter xử lý
+  null/blank an toàn), `GroupService.createGroup()` (`name` + `description`),
+  `FanpageService.createPage()` (`name` + `description`). Cả 4 service này vốn chỉ có create, không
+  có update — nên không cần đụng vào luồng edit.
+- **`removeForModeration(id)`** thêm vào cả 4 service, theo đúng kiểu idempotent (no-op nếu đã bị xoá)
+  như post/comment. Khác biệt so với post (xoá đơn giản, 1 bảng): `group-service` và `fanpage-service`
+  có bảng phụ thuộc (`GroupMember`, `PageAdmin`/`PageFollower`) — phải xoá cascade thủ công trước khi
+  xoá entity chính (không có cascade ORM sẵn), nên thêm `deleteByGroupId`/`deleteByPageId` vào các
+  repository tương ứng.
+- **Kafka listener nghe `ContentRemovedEvent`**: `reels-service` đã có `ReelEventListener` sẵn (dùng
+  cho comment/reaction denormalized count) — chỉ thêm 1 method mới vào đó. 3 service còn lại
+  (`story-service`, `group-service`, `fanpage-service`) **chưa từng có `@KafkaListener` nào** — đây là
+  lần đầu chúng trở thành Kafka consumer chứ không chỉ producer, tương tự việc comment-service lần đầu
+  có listener ở đợt post/comment trước đó. **Phát hiện gap cấu hình**: `group-service` và
+  `fanpage-service`'s `application.yml` trước đó chỉ có `spring.kafka.producer`, hoàn toàn thiếu
+  `spring.kafka.consumer` — phải thêm cả block consumer (group-id, deserializer, trusted-packages) thì
+  `${spring.kafka.consumer.group-id}` trong `@KafkaListener` mới resolve được, nếu không sẽ lỗi khởi
+  động ngay khi bean được tạo.
+
+Build+test toàn reactor (18 module): **mvn clean install pass**. Test mới/cập nhật: `ReelServiceTest`
+13 test (thêm 3: profanity + removeForModeration hit/miss), `ReelEventListenerTest` 10 test (constructor
+đổi vì thêm `ReelService` dependency, thêm 2 test `onContentRemoved`), `StoryServiceTest` 14 test (+3),
+`StoryEventListenerTest` 2 test (file mới), `GroupServiceTest` 32 test (+4, bao gồm verify
+`deleteByGroupId` được gọi trước `delete`), `GroupModerationListenerTest` 2 test (file mới),
+`FanpageServiceTest` 28 test (+4, verify cả `deleteByPageId` cho follower lẫn admin), 
+`FanpageModerationListenerTest` 2 test (file mới) — tổng 103 test qua 8 file, tất cả pass.
+
+**Đã verify bằng luồng thật qua Docker + curl** (redeploy 4 service, không chỉ unit test mock), chọn
+2 case phức tạp nhất — `group-service` và `fanpage-service` — vì đây là 2 service duy nhất có cascade
+cleanup (bảng phụ thuộc `GroupMember`, `PageAdmin`/`PageFollower`):
+1. Tạo group tên tục ("...fucking...") → **400**; tạo fanpage description tục → **400** — profanity filter chặn đúng ở cả 2.
+2. Tạo group/fanpage sạch, report qua `POST /api/moderation/reports` với `targetType: GROUP`/`FANPAGE`.
+3. Admin `PUT /api/moderation/reports/{id}/resolve` với `REMOVE_CONTENT` → 200, `resolutionNote` lưu đúng.
+4. `GET /api/groups/{id}` và `GET /api/pages/{id}` sau đó → **404** — xác nhận `ContentRemovedEvent` đã xoá thật qua Kafka.
+5. Log container xác nhận đúng listener xử lý: `GroupModerationListener` và `FanpageModerationListener` đều log dòng "Removing {type} {id} — moderation report ..." trước khi gọi `removeForModeration`.
+
+`reels-service`/`story-service` dùng đúng pattern đơn giản hơn (không có bảng phụ thuộc, giống hệt
+post-service) nên không lặp lại live-verify — đã được cover đầy đủ qua unit test.
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
 1. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt trước để không thêm quá nhiều container cùng lúc.
-2. **Mở rộng content moderation sang các service còn lại** — hiện chỉ post/comment có profanity filter + xử lý `ContentRemovedEvent`; reels/story/group/fanpage chưa có.
-3. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
-4. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
-5. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+2. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
+3. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
+4. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 
