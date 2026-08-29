@@ -139,15 +139,25 @@ Build+test toàn reactor + redeploy Docker 2 lần (thêm tracing dep, rồi b�
 
 Truy cập: Zipkin UI `http://localhost:9411`, Grafana `http://localhost:3000` (anonymous admin), Loki API `http://localhost:3100` (thường dùng qua Grafana Explore chứ không gọi trực tiếp).
 
+## ✅ CI/CD pipeline (GitHub Actions)
+
+Repo đã có remote GitHub thật (`robinson1712/SE347-TSON-social-media-real-time-system`) nên dùng GitHub Actions, file `.github/workflows/ci-cd.yml`, 2 job:
+
+1. **`build-and-test`** (mọi push/PR vào `main`): `mvn clean install` (build 18 module + chạy 279 unit test) → chạy riêng `GroupRepositoryIntegrationTest` (Testcontainers) — runner Ubuntu của GitHub có Docker thật, không bị giới hạn như môi trường sandbox local, nên đây chính là nơi verify được test này thay vì máy dev. Upload surefire report làm artifact để debug khi fail.
+2. **`docker-images`** (cần job 1 xanh): build lại jar (`-DskipTests`, đã test ở job 1) → build Docker image cho cả 17 service (validate Dockerfile không vỡ trên **mọi** PR) → **chỉ push lên GHCR** (`ghcr.io/<owner>/<repo>-<service>:latest` + `:<sha>`) khi là push thẳng vào `main`, dùng `GITHUB_TOKEN` có sẵn, không cần secret riêng.
+
+**Sửa kèm 1 lỗi phát hiện lúc làm CI**: `.gitignore` thiếu `target/` — **158 file build artifact** (jar, class, log Maven) đã bị lỡ track vào git từ trước. Đã cập nhật `.gitignore` (`target/`, `.idea/`, IDE noise) và `git rm --cached` gỡ tracking (file vẫn còn trên đĩa, chỉ không theo dõi nữa).
+
+⚠️ **Chưa verify được thật trên GitHub** — file workflow mới chỉ tạo ở local, cần commit + push mới kích hoạt (tôi không tự ý commit/push vì đó là hành động ảnh hưởng repo chung — cần bạn xác nhận). Sau khi push, vào tab Actions của repo để xem chạy có xanh không.
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
-1. **Chạy thử `GroupRepositoryIntegrationTest` trên môi trường Docker không bị giới hạn** để xác nhận, rồi mở rộng pattern này sang service khác nếu thấy giá trị.
-2. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt này để không thêm quá nhiều container cùng lúc.
+1. **Commit + push để CI/CD thật sự chạy trên GitHub**, xác nhận cả 2 job (đặc biệt là Testcontainers integration test) pass trên runner thật.
+2. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt trước để không thêm quá nhiều container cùng lúc.
 3. **Content moderation** — chưa có filter/kiểm duyệt nội dung post/comment.
-4. **CI/CD pipeline** — chưa có (giờ có 279 test, chạy CI mỗi lần push sẽ rất có giá trị).
-5. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
-6. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
-7. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+4. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
+5. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
+6. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 
