@@ -91,11 +91,11 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 | `eureka-server` | 8761 | ✅ Xong | — |
 | `config-server` | 8888 | ✅ Xong | Đang bị dùng ít — có thể đẩy thêm config dùng chung (vd. resilience4j defaults) sang đây |
 | `api-gateway` | 8080 | ✅ Xong + rate limit | Route WebSocket `/ws/**` chưa có rate-limit |
-| `auth-service` | 8081 | ✅ Xong | Chưa có: reset mật khẩu, xác minh email, khoá tài khoản sau N lần login sai, OAuth2/social login |
+| `auth-service` | 8081 | ✅ Xong + admin allowlist | Chưa có: reset mật khẩu, xác minh email, khoá tài khoản sau N lần login sai, OAuth2/social login |
 | `user-service` | 8082 | ✅ Xong | Chưa có: tìm kiếm user, gợi ý bạn chung |
 | `media-service` | 8083 | ✅ Xong | Chưa có: resize ảnh/tạo thumbnail, giới hạn dung lượng/loại file, transcode video |
-| `post-service` | 8084 | ✅ Xong | Chưa có: lịch sử chỉnh sửa, ghim bài, report bài viết |
-| `comment-service` | 8085 | ✅ Xong + circuit breaker | — |
+| `post-service` | 8084 | ✅ Xong + profanity filter + xoá theo report | Chưa có: lịch sử chỉnh sửa, ghim bài |
+| `comment-service` | 8085 | ✅ Xong + circuit breaker + profanity filter + xoá theo report | — |
 | `reaction-service` | 8086 | ✅ Xong | Đơn giản hoá có chủ đích: nhận `targetOwnerId` từ client thay vì tự resolve qua Feign |
 | `story-service` | 8087 | ✅ Xong + circuit breaker | Chưa có: story highlights (lưu vĩnh viễn), reply story qua chat |
 | `reels-service` | 8088 | ✅ Xong | Feed reels vẫn thuần theo thời gian (chưa áp dụng ranking như feed-service) |
@@ -105,8 +105,9 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 | `chat-service` | 8092 | ✅ Xong (WebSocket thật) | Chưa có: sửa/xoá tin nhắn, typing indicator, read-receipt chi tiết (hiện chỉ có mark-all-read) |
 | `notification-service` | 8093 | ✅ Xong (WebSocket thật) | Chưa có: push notification ra mobile (FCM/APNs), cài đặt loại thông báo |
 | `feed-service` | 8094 | ✅ Xong + engagement ranking | Chưa gộp story/reels vào cùng feed logic |
+| `moderation-service` | 8095 | ✅ Xong (report + admin review queue) | Chưa mở rộng sang reels/story/group/fanpage — chỉ post/comment nghe `ContentRemovedEvent` |
 
-**14/14 business service + 3/3 hạ tầng đều đã hoàn thành scaffold và build được** — không có service nào còn ở dạng rỗng/chưa code.
+**15/15 business service + 3/3 hạ tầng đều đã hoàn thành scaffold và build được** — không có service nào còn ở dạng rỗng/chưa code.
 
 ---
 
@@ -154,10 +155,68 @@ Repo đã có remote GitHub thật (`robinson1712/SE347-TSON-social-media-real-t
 - `build-and-test`: `mvn clean install` xanh + **`GroupRepositoryIntegrationTest` (Testcontainers) pass thật** trong 20s trên runner có Docker không giới hạn — xác nhận đúng dự đoán, không phải lỗi code.
 - `docker-images`: build + push cả 17 image lên GHCR thành công, dùng `GITHUB_TOKEN` có sẵn không cần secret riêng.
 
+## ✅ Content moderation
+
+Ba lớp bổ sung nhau, không thay thế nhau:
+
+- **Profanity filter tự động** (`common-lib` → `ProfanityFilter`): danh sách từ cấm tiếng Anh + tiếng
+  Việt, so khớp substring sau khi normalize Unicode **NFC** (compose, không decompose) và chỉ bỏ
+  ký tự không phải chữ/số (để chặn né tránh kiểu chèn dấu câu/khoảng trắng). **Cố ý giữ nguyên dấu
+  thanh tiếng Việt** — không dùng NFKD/strip combining marks, vì dấu thanh tiếng Việt mang nghĩa
+  (khác dấu phụ tiếng Pháp): bug thật đã phát hiện lúc viết test — "đi chơi" (đi, bỏ dấu) từng bị
+  chuẩn hoá trùng với "đĩ" (một từ tục) khi dùng NFKD, gây false positive nghiêm trọng cho câu hoàn
+  toàn vô hại. Đã sửa và thêm test `cleanText_isNotFlagged` để khoá lại hành vi đúng. Áp dụng ở
+  `post-service` (`createPost`/`updatePost`) và `comment-service` (`createComment`/`updateComment`)
+  — chặn ngay lúc tạo/sửa, trả lỗi 400 trước khi ghi DB. Có giới hạn đã biết và ghi rõ trong Javadoc:
+  so khớp substring gây false positive kiểu "Scunthorpe problem" (từ vô hại chứa chuỗi con là từ
+  cấm) — chấp nhận đánh đổi vì đơn giản, không cần NLP.
+- **User report + admin review queue** (`moderation-service`, port 8095, Postgres `moderation_db`,
+  service thứ 18): user gọi `POST /api/moderation/reports` báo cáo nội dung (targetType/targetId/
+  reason/description), tự xem lại report của mình qua `GET /api/moderation/reports/mine`. Admin
+  (role `ADMIN`, gate bằng `CurrentUserContext.getRoles()`) xem hàng đợi `GET /api/moderation/reports`
+  (filter theo status/targetType), xử lý qua `POST /api/moderation/reports/{id}/resolve` với 2 hành
+  động: `DISMISS` (đóng report, không hành động) hoặc `REMOVE_CONTENT` (đánh dấu `ACTION_TAKEN` +
+  publish `ContentRemovedEvent` lên Kafka topic `content-removed-events`).
+- **Xoá nội dung xuyên service qua Kafka** (event-driven, không gọi REST đồng bộ): `post-service` và
+  `comment-service` đều có `@KafkaListener` mới lắng nghe `ContentRemovedEvent`, lọc theo
+  `targetType` (`"POST"`/`"COMMENT"`), gọi `removeForModeration(targetId)` — post-service xoá cứng,
+  comment-service soft-delete (nhất quán với cách xoá thường của từng service). Đây là lần đầu
+  comment-service có `@KafkaListener` (trước đó chỉ producer).
+- **Cấp quyền ADMIN lúc đăng ký** (`auth-service` → `AdminEmailAllowlist`): đọc danh sách email admin
+  từ `ADMIN_EMAILS` (comma-separated, env var, mặc định rỗng) — email nào khớp allowlist được gán
+  role `["USER","ADMIN"]` lúc `register()`, còn lại chỉ `["USER"]`. Đơn giản hoá có chủ đích cho đồ
+  án (không cần UI quản trị cấp quyền riêng) — ghi rõ trong `application.yml` với comment giải thích.
+
+Build+test toàn reactor (18 module, gồm `moderation-service` mới — 19 module thật ra vẫn tính là
+18 service nghiệp vụ+hạ tầng vì `common-lib` không tính là service riêng): **mvn clean install pass,
+`ModerationServiceTest` 11/11 pass** (createReport có/không auth, getMyReports, listReports/getReport
+gate ADMIN, resolveReport 2 nhánh DISMISS/REMOVE_CONTENT + verify đúng `ContentRemovedEvent` publish
+qua `ArgumentCaptor`, resolveReport report đã xử lý rồi → 409 Conflict).
+
+`docker-compose.yml`: thêm `moderation_db` vào `POSTGRES_MULTIPLE_DATABASES`, container
+`moderation-service` (port 8095), `ADMIN_EMAILS: admin@social.app` vào `x-app-env` dùng chung.
+`api-gateway`: thêm route `/api/moderation/**` → `MODERATION-SERVICE` (cùng rate-limit mặc định như
+các service khác).
+
+**Đã verify bằng luồng thật qua Docker + curl (không chỉ unit test mock)**, redeploy full 18 service:
+1. Đăng ký `admin@social.app` (nằm trong `ADMIN_EMAILS`) → token JWT có đúng `"roles":["USER","ADMIN"]`; đăng ký email thường → chỉ `["USER"]`.
+2. `POST /api/posts` với nội dung tục ("...fucking...") → **400 "Content violates community guidelines"**, không tạo được.
+3. Tạo post sạch, user thường report qua `POST /api/moderation/reports` → 200, status `PENDING`.
+4. User thường gọi `GET /api/moderation/reports` (hàng đợi) → **403 "Admin access required"** — đúng gate.
+5. Admin gọi cùng endpoint → thấy đúng report vừa tạo, status `PENDING`.
+6. Admin gọi `PUT /api/moderation/reports/{id}/resolve` với `REMOVE_CONTENT` → 200, status chuyển `ACTION_TAKEN`, `reviewedBy` đúng accountId admin.
+7. Gọi lại `GET /api/posts/{id}` (không qua moderation-service, thẳng post-service) → **404 "Post not found"** — xác nhận `ContentRemovedEvent` đã đi qua Kafka thật, `post-service` nhận và xoá đúng object trong Postgres, không phải giả lập.
+
+**Sự cố phát hiện lúc verify (đã fix, không phải bug code)**: volume Postgres đã tồn tại từ lần chạy
+trước, nên script `init-multi-db.sh` (chỉ chạy khi khởi tạo volume rỗng) không tự tạo `moderation_db`
+mới — phải tạo thủ công (`CREATE DATABASE moderation_db`) rồi restart container. Đây là đặc thù môi
+trường dev cục bộ (volume tái sử dụng), không ảnh hưởng lúc `docker compose down -v` sạch hoặc deploy
+lần đầu.
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
 1. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt trước để không thêm quá nhiều container cùng lúc.
-2. **Content moderation** — chưa có filter/kiểm duyệt nội dung post/comment.
+2. **Mở rộng content moderation sang các service còn lại** — hiện chỉ post/comment có profanity filter + xử lý `ContentRemovedEvent`; reels/story/group/fanpage chưa có.
 3. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
 4. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
 5. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
