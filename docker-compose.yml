@@ -7,6 +7,7 @@ x-app-env: &app-env
   REDIS_HOST: redis
   REDIS_PORT: 6379
   JWT_SECRET: change-this-social-app-jwt-secret-key-must-be-at-least-256-bits
+  ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
 
 services:
   # ---------- Infrastructure ----------
@@ -78,6 +79,46 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+
+  # ---------- Observability ----------
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: sma-zipkin
+    ports:
+      - "9411:9411"
+
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: sma-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    container_name: sma-promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/observability/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sma-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./docker/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    depends_on:
+      - loki
+      - zipkin
 
   # ---------- Spring Cloud infra ----------
   eureka-server:

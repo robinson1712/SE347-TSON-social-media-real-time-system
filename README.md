@@ -32,6 +32,8 @@ Client (Web/Mobile)
 
   Config Server (8888) — cấp config tập trung (native, đọc từ ./config-repo)
   Kafka — giao tiếp bất đồng bộ giữa các service (post/comment/reaction/group/page/match/message events)
+
+  Observability: Zipkin (9411, distributed tracing) — Loki+Promtail+Grafana (3000, log tập trung)
 ```
 
 Chi tiết đầy đủ: xem `docs/plan.md` hoặc lịch sử trò chuyện đã tạo ra hệ thống này.
@@ -81,7 +83,11 @@ curl -X POST http://localhost:8080/api/posts -H "Authorization: Bearer $TOKEN" \
 curl http://localhost:8080/api/feed/me -H "Authorization: Bearer $TOKEN"
 ```
 
-WebSocket chat/notification: kết nối STOMP over SockJS tới `ws://localhost:8080/ws?token=$TOKEN`.
+WebSocket (STOMP): chat tại `ws://localhost:8080/ws?token=$TOKEN` (SockJS) hoặc `ws://localhost:8080/ws/websocket?token=$TOKEN` (raw WebSocket, bỏ qua SockJS framing); notification tại `ws://localhost:8080/ws-notifications?token=$TOKEN` (SockJS) hoặc `.../ws-notifications/websocket?token=$TOKEN` (raw) — hai đường dẫn khác nhau vì gateway chỉ route được một service cho mỗi path.
+
+Swagger UI: mỗi service có UI test API riêng trên port của nó, vd `http://localhost:8084/swagger-ui/index.html` (post-service), `http://localhost:8091/swagger-ui/index.html` (dating-service) — xem bảng port ở trên để suy ra URL cho service khác.
+
+Observability: Zipkin UI `http://localhost:9411` (tìm trace theo service/traceId — mọi request qua gateway đều có 100% được trace, kể cả chặng Kafka bất đồng bộ); Grafana `http://localhost:3000` (anonymous admin, không cần đăng nhập) → Explore → datasource Loki để xem log tập trung mọi container, filter theo `{service="auth-service"}` — mỗi dòng log đều có sẵn `[traceId-spanId]` để tra ngược đúng trace trong Zipkin.
 
 ### Chạy từng service riêng lẻ khi phát triển (không qua Docker)
 

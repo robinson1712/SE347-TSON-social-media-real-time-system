@@ -44,6 +44,17 @@ Theo dõi tiến độ đồ án: đã làm gì, service nào xong, còn thiếu
 
 Sau khi sửa hết, đã build sạch từ đầu (`mvn clean install`) + `docker compose down -v && up -d --build` một lần nữa và test lại toàn bộ — pass hết, không cần patch tay.
 
+## Lỗi thứ 8: WebSocket của notification-service không thể truy cập qua gateway
+
+Phát hiện khi test STOMP thật (dùng `java.net.http.WebSocket` viết tay, không có node/wscat trong máy): `chat-service` và `notification-service` đều đăng ký STOMP endpoint tại **cùng path `/ws`**, nhưng `api-gateway` chỉ có một route `/ws/**` → `CHAT-SERVICE`. Nghĩa là client **không bao giờ gọi được** WebSocket của notification-service qua cổng công khai (8080) — chỉ có cách bypass gateway gọi thẳng port 8093 (không qua xác thực JWT).
+
+→ Đổi endpoint của notification-service thành `/ws-notifications` (`WebSocketConfig.java`), thêm route riêng `notification-service-ws` → `NOTIFICATION-SERVICE` trong gateway. Verify lại bằng chương trình Java tự viết (`java.net.http.WebSocket`, không cần cài node/wscat):
+
+- **Chat**: Alice & Bob kết nối `ws://localhost:8080/ws/websocket?token=...` qua gateway (JWT qua query param, gateway set `X-User-Id`, `CONNECTED` frame trả đúng `user-name`) → Alice gửi `SEND /app/chat.send` → **Bob nhận `MESSAGE` frame real-time đúng nội dung** trên `/user/queue/messages`.
+- **Notification**: Bob subscribe `ws://localhost:8080/ws-notifications/websocket?token=...` → Alice gửi friend-request qua REST → **Bob nhận `MESSAGE` frame real-time** trên `/user/queue/notifications` với đúng nội dung `FriendRequestEvent`.
+
+Đây đúng là loại lỗi mà `TODO.md` đã cảnh báo trước — unit test (mock) không bắt được vì nó nằm ở tầng routing/hạ tầng, chỉ lộ ra khi gọi qua gateway thật.
+
 ## Unit test — 279 test trên toàn bộ 14/14 business service
 
 Thêm `CurrentUserContext.setForTests()/clearForTests()` (public, common-lib) làm "cửa hậu" test-only cho service dùng `CurrentUserContext.getUserId()` — `set()`/`clear()` gốc vẫn package-private, chỉ `HeaderAuthFilter` gọi được ở production. Một số service (`user-service`, `media-service`) nhận `currentUserId` qua tham số method thay vì đọc `CurrentUserContext` trực tiếp nên không cần seam này.
@@ -99,12 +110,45 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 
 ---
 
+## Integration test (Testcontainers) — viết được, nhưng môi trường hiện tại chặn Docker API trực tiếp
+
+Đã viết `GroupRepositoryIntegrationTest` (`group-service`) — chạy chính JPQL `findVisibleGroups` (câu query từng gây lỗi `lower(bytea)` thật) trên **Postgres thật** qua Testcontainers, không phải mock. 5 test: filter rỗng không lỗi, private group chỉ hiện với member đã APPROVED (không hiện với PENDING/người lạ/ẩn danh), filter tên không phân biệt hoa-thường, sanity check mapping entity `SocialGroup`→bảng `groups`.
+
+**Không chạy được trong môi trường sandbox hiện tại**: Testcontainers không kết nối được Docker daemon (`docker` CLI hoạt động bình thường — `docker compose` chạy tốt suốt session — nhưng thư viện `docker-java` mà Testcontainers dùng để gọi thẳng Docker API qua named pipe bị chặn/trả về response rỗng, thử cả 2 pipe `docker_engine`/`dockerDesktopLinuxEngine` và tắt sandbox của Bash tool đều không khắc phục được — nhiều khả năng là giới hạn bảo mật ở tầng host/Docker Desktop, không phải lỗi trong code). Đã cấu hình `maven-surefire-plugin` loại `**/*IntegrationTest.java` khỏi `mvn test`/`mvn install` mặc định để không chặn build — chạy thủ công bằng `mvn test -Dtest=GroupRepositoryIntegrationTest -DfailIfNoTests=false` trên máy có Docker truy cập được bình thường (CI Linux, WSL2 native, máy dev khác...).
+
+## ✅ Swagger/OpenAPI UI — đã thêm vào cả 14/14 business service
+
+`springdoc-openapi-starter-webmvc-ui` (version đã khai sẵn ở root `pom.xml`) được thêm vào tất cả 14 service. Verify trực tiếp qua Docker thật (`/swagger-ui/index.html` HTTP 200, `/v3/api-docs` trả đúng OpenAPI JSON với schema request/response chính xác) trên `post-service`, `dating-service`, `group-service`, và cả `chat-service` (service dùng WebSocket — REST endpoint vẫn generate đúng, STOMP tất nhiên không thuộc OpenAPI vì khác giao thức). Build lại toàn reactor + redeploy Docker: **18/18 module, 279/279 test vẫn pass**.
+
+Truy cập: mỗi service có Swagger UI riêng trên port của nó, ví dụ `http://localhost:8084/swagger-ui/index.html` (post-service). Chưa gộp qua gateway thành 1 điểm truy cập chung (mỗi service vẫn expose riêng lẻ) — có thể cải thiện sau nếu cần.
+
+## ✅ Observability — distributed tracing (Zipkin) + centralized logging (Loki/Promtail/Grafana)
+
+Chọn bộ nhẹ thay vì ELK (Elasticsearch quá nặng RAM so với tài nguyên máy đang có, từng thấy rõ khi 22 container đã gây tranh chấp CPU):
+
+- **Tracing**: `micrometer-tracing-bridge-brave` + `zipkin-reporter-brave` thêm vào `api-gateway` + 14 business service (15 service, bỏ qua eureka-server/config-server vì không nằm trong luồng request). `management.tracing.sampling.probability: 1.0` (100% để dễ demo — production thật nên hạ xuống). Container `zipkin` (port 9411).
+- **Kafka tracing**: mặc định Spring Boot 3 **tắt** observation cho Kafka producer/consumer — phải bật tường minh `spring.kafka.template.observation-enabled: true` + `spring.kafka.listener.observation-enabled: true` (13 service có Kafka) mới nối được nhánh async vào cùng trace.
+- **Logging tập trung**: `loki` (lưu trữ/query log) + `promtail` (tự động discover mọi container qua Docker socket, ship log lên Loki, gắn nhãn theo tên service — không cần cấu hình riêng khi thêm service mới) + `grafana` (UI hợp nhất, anonymous admin access cho demo, đã provision sẵn 2 datasource Loki + Zipkin).
+
+**Đã verify bằng dữ liệu thật** (không chỉ container "Up"):
+- Trace 1 request `POST /api/auth/register` cho ra **5 span xuyên 3 service với cùng 1 traceId**: `api-gateway` (SERVER+CLIENT) → `auth-service` (SERVER, rồi PRODUCER gửi `UserRegisteredEvent`) → `user-service` (CONSUMER nhận event) — thấy được toàn bộ đường đi kể cả nhánh Kafka bất đồng bộ, không chỉ phần REST.
+- Query Loki xác nhận log của mọi container đều được hút về, và **mỗi dòng log tự động có `[traceId-spanId]`** (Spring Boot tự thêm khi có Micrometer Tracing) — nghĩa là từ 1 trace trong Zipkin có thể tra ngược đúng log chi tiết trong Loki bằng traceId.
+- Grafana `/api/health` 200, 2 datasource (Loki, Zipkin) provision đúng qua file, không cần cấu hình tay.
+
+Build+test toàn reactor + redeploy Docker 2 lần (thêm tracing dep, rồi bật Kafka observation): **18/18 module, 279/279 test vẫn pass**.
+
+Truy cập: Zipkin UI `http://localhost:9411`, Grafana `http://localhost:3000` (anonymous admin), Loki API `http://localhost:3100` (thường dùng qua Grafana Explore chứ không gọi trực tiếp).
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
-1. **Test WebSocket thật** (chat/notification) — unit test đã phủ toàn bộ logic nghiệp vụ (dedup conversation, participant check, denormalized preview, listener) bằng mock, nhưng chưa test STOMP/SockJS thật qua dây mạng (gửi/nhận tin nhắn realtime end-to-end) vì khó làm bằng curl — cần client WebSocket thật (browser/Postman/wscat).
-2. **Integration test** (tối thiểu 1-2 test dùng Testcontainers cho Postgres/Mongo/Kafka thật) — 279 unit test hiện tại đều mock repository/Kafka, chưa có test nào chạy qua DB thật để bắt các lỗi kiểu mục "6 lỗi runtime" (vd. lỗi JPQL, lỗi mapping cột) mà chỉ mock thì không thấy được.
-3. **Swagger/OpenAPI UI** — dependency `springdoc-openapi` đã khai version sẵn ở root `pom.xml` nhưng **chưa service nào thực sự thêm vào** để có UI test API trên trình duyệt.
-4. **Observability** — chưa có distributed tracing (Zipkin/OpenTelemetry), chưa có log tập trung, chưa có dashboard metrics (hiện chỉ có `actuator/health` + `actuator/circuitbreakers`).
-5. **Content moderation** — chưa có filter/kiểm duyệt nội dung post/comment.
-6. **CI/CD pipeline** — chưa có (giờ có 279 test, chạy CI mỗi lần push sẽ rất có giá trị).
-7. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
+1. **Chạy thử `GroupRepositoryIntegrationTest` trên môi trường Docker không bị giới hạn** để xác nhận, rồi mở rộng pattern này sang service khác nếu thấy giá trị.
+2. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt này để không thêm quá nhiều container cùng lúc.
+3. **Content moderation** — chưa có filter/kiểm duyệt nội dung post/comment.
+4. **CI/CD pipeline** — chưa có (giờ có 279 test, chạy CI mỗi lần push sẽ rất có giá trị).
+5. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
+6. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
+7. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+
+## ✅ Đã test WebSocket thật (chat + notification)
+
+Xem "Lỗi thứ 8" ở trên — cả 2 luồng real-time đã verify PASS qua gateway thật với JWT thật, không phải qua mock.
