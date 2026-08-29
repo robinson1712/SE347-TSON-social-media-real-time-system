@@ -110,11 +110,13 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 
 ---
 
-## Integration test (Testcontainers) — viết được, nhưng môi trường hiện tại chặn Docker API trực tiếp
+## ✅ Integration test (Testcontainers) — đã verify PASS thật trên GitHub Actions
 
 Đã viết `GroupRepositoryIntegrationTest` (`group-service`) — chạy chính JPQL `findVisibleGroups` (câu query từng gây lỗi `lower(bytea)` thật) trên **Postgres thật** qua Testcontainers, không phải mock. 5 test: filter rỗng không lỗi, private group chỉ hiện với member đã APPROVED (không hiện với PENDING/người lạ/ẩn danh), filter tên không phân biệt hoa-thường, sanity check mapping entity `SocialGroup`→bảng `groups`.
 
-**Không chạy được trong môi trường sandbox hiện tại**: Testcontainers không kết nối được Docker daemon (`docker` CLI hoạt động bình thường — `docker compose` chạy tốt suốt session — nhưng thư viện `docker-java` mà Testcontainers dùng để gọi thẳng Docker API qua named pipe bị chặn/trả về response rỗng, thử cả 2 pipe `docker_engine`/`dockerDesktopLinuxEngine` và tắt sandbox của Bash tool đều không khắc phục được — nhiều khả năng là giới hạn bảo mật ở tầng host/Docker Desktop, không phải lỗi trong code). Đã cấu hình `maven-surefire-plugin` loại `**/*IntegrationTest.java` khỏi `mvn test`/`mvn install` mặc định để không chặn build — chạy thủ công bằng `mvn test -Dtest=GroupRepositoryIntegrationTest -DfailIfNoTests=false` trên máy có Docker truy cập được bình thường (CI Linux, WSL2 native, máy dev khác...).
+**Không chạy được trong môi trường sandbox local**: Testcontainers không kết nối được Docker daemon (`docker` CLI hoạt động bình thường nhưng `docker-java` gọi thẳng Docker API qua named pipe bị chặn/trả response rỗng — giới hạn bảo mật tầng host, không phải lỗi code). Đã cấu hình `maven-surefire-plugin` loại `**/*IntegrationTest.java` khỏi `mvn test` mặc định để không chặn build local.
+
+**Đã xác nhận đúng dự đoán khi CI/CD chạy trên GitHub Actions** (xem mục CI/CD dưới) — bước "Run Testcontainers integration test (group-service)" **pass thật** trên runner Ubuntu có Docker không giới hạn, đúng 20 giây, không cần patch gì thêm. Đây là bằng chứng trực tiếp: code hoàn toàn đúng, chỉ là môi trường dev local đặc thù mới bị chặn.
 
 ## ✅ Swagger/OpenAPI UI — đã thêm vào cả 14/14 business service
 
@@ -148,16 +150,17 @@ Repo đã có remote GitHub thật (`robinson1712/SE347-TSON-social-media-real-t
 
 **Sửa kèm 1 lỗi phát hiện lúc làm CI**: `.gitignore` thiếu `target/` — **158 file build artifact** (jar, class, log Maven) đã bị lỡ track vào git từ trước. Đã cập nhật `.gitignore` (`target/`, `.idea/`, IDE noise) và `git rm --cached` gỡ tracking (file vẫn còn trên đĩa, chỉ không theo dõi nữa).
 
-⚠️ **Chưa verify được thật trên GitHub** — file workflow mới chỉ tạo ở local, cần commit + push mới kích hoạt (tôi không tự ý commit/push vì đó là hành động ảnh hưởng repo chung — cần bạn xác nhận). Sau khi push, vào tab Actions của repo để xem chạy có xanh không.
+**Đã commit + push (`adc4245`) và verify PASS 100% thật trên GitHub Actions** (run #1, ~5.5 phút, [xem log](https://github.com/robinson1712/SE347-TSON-social-media-real-time-system/actions/runs/33243483057)):
+- `build-and-test`: `mvn clean install` xanh + **`GroupRepositoryIntegrationTest` (Testcontainers) pass thật** trong 20s trên runner có Docker không giới hạn — xác nhận đúng dự đoán, không phải lỗi code.
+- `docker-images`: build + push cả 17 image lên GHCR thành công, dùng `GITHUB_TOKEN` có sẵn không cần secret riêng.
 
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
-1. **Commit + push để CI/CD thật sự chạy trên GitHub**, xác nhận cả 2 job (đặc biệt là Testcontainers integration test) pass trên runner thật.
-2. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt trước để không thêm quá nhiều container cùng lúc.
-3. **Content moderation** — chưa có filter/kiểm duyệt nội dung post/comment.
-4. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
-5. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
-6. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+1. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt trước để không thêm quá nhiều container cùng lúc.
+2. **Content moderation** — chưa có filter/kiểm duyệt nội dung post/comment.
+3. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
+4. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
+5. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 
