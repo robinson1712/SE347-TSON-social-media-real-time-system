@@ -91,7 +91,26 @@ public class PostService {
     }
 
     public Page<Post> getPostsByAuthor(String authorId, Pageable pageable) {
-        return postRepository.findByAuthorIdOrderByCreatedAtDesc(authorId, pageable);
+        return postRepository.findByAuthorId(authorId, pageable);
+    }
+
+    public Post pinPost(String id) {
+        return setPinned(id, true);
+    }
+
+    public Post unpinPost(String id) {
+        return setPinned(id, false);
+    }
+
+    private Post setPinned(String id, boolean pinned) {
+        Post post = getPost(id);
+        String currentUserId = CurrentUserContext.getUserId();
+        if (!post.getAuthorId().equals(currentUserId)) {
+            throw new ForbiddenException("Only the author can pin this post");
+        }
+        post.setPinned(pinned);
+        post.setUpdatedAt(Instant.now());
+        return postRepository.save(post);
     }
 
     public Page<Post> getPostsByGroup(String groupId, Pageable pageable) {

@@ -61,6 +61,14 @@ public class Post {
     @Builder.Default
     private int reactionCount = 0;
 
+    // Explicit SQL-level DEFAULT — without it, Hibernate's ALTER TABLE ADD COLUMN
+    // ... NOT NULL (no default) fails against a posts table that already has rows,
+    // since Postgres has no way to backfill the existing rows. @Builder.Default
+    // alone only affects the Java-side builder, not the generated DDL.
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean pinned = false;
+
     private Instant createdAt;
 
     private Instant updatedAt;

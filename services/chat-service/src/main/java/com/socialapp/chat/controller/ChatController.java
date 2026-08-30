@@ -12,6 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,6 +56,11 @@ public class ChatController {
     public ResponseEntity<ApiResponse<Void>> markRead(@PathVariable String id) {
         chatService.markRead(id, CurrentUserContext.getUserId());
         return ResponseEntity.ok(ApiResponse.success("Marked as read", null));
+    }
+
+    @DeleteMapping("/messages/{id}")
+    public ResponseEntity<ApiResponse<Message>> deleteMessage(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.success("Message deleted", chatService.deleteMessage(id, CurrentUserContext.getUserId())));
     }
 
     @GetMapping("/presence/{userId}")

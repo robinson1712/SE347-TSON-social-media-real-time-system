@@ -37,4 +37,7 @@ public class Message {
 
     @Builder.Default
     private Set<String> readBy = new HashSet<>();
+
+    @Builder.Default
+    private boolean deleted = false;
 }

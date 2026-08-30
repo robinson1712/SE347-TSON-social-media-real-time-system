@@ -268,4 +268,66 @@ class PostServiceTest {
 
         assertThat(post.getReactionCount()).isZero();
     }
+
+    @Test
+    void pinPost_byAuthor_setsPinnedTrue() {
+        CurrentUserContext.setForTests("author-1", List.of("USER"));
+        Post post = existingPost("post-1", "author-1");
+        when(postRepository.findById("post-1")).thenReturn(Optional.of(post));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Post pinned = postService.pinPost("post-1");
+
+        assertThat(pinned.isPinned()).isTrue();
+        assertThat(pinned.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void pinPost_byNonAuthor_throwsForbiddenAndNeverSaves() {
+        CurrentUserContext.setForTests("someone-else", List.of("USER"));
+        when(postRepository.findById("post-1")).thenReturn(Optional.of(existingPost("post-1", "author-1")));
+
+        assertThatThrownBy(() -> postService.pinPost("post-1"))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    void unpinPost_byAuthor_setsPinnedFalse() {
+        CurrentUserContext.setForTests("author-1", List.of("USER"));
+        Post post = existingPost("post-1", "author-1");
+        post.setPinned(true);
+        when(postRepository.findById("post-1")).thenReturn(Optional.of(post));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Post unpinned = postService.unpinPost("post-1");
+
+        assertThat(unpinned.isPinned()).isFalse();
+    }
+
+    @Test
+    void unpinPost_byNonAuthor_throwsForbiddenAndNeverSaves() {
+        CurrentUserContext.setForTests("someone-else", List.of("USER"));
+        Post post = existingPost("post-1", "author-1");
+        post.setPinned(true);
+        when(postRepository.findById("post-1")).thenReturn(Optional.of(post));
+
+        assertThatThrownBy(() -> postService.unpinPost("post-1"))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    void getPostsByAuthor_delegatesToRepositoryWithGivenPageable() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 20);
+        Post post = existingPost("post-1", "author-1");
+        org.springframework.data.domain.Page<Post> page = new org.springframework.data.domain.PageImpl<>(List.of(post));
+        when(postRepository.findByAuthorId("author-1", pageable)).thenReturn(page);
+
+        org.springframework.data.domain.Page<Post> result = postService.getPostsByAuthor("author-1", pageable);
+
+        assertThat(result.getContent()).containsExactly(post);
+    }
 }

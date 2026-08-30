@@ -1,5 +1,6 @@
 package com.socialapp.user.service;
 
+import com.socialapp.common.exception.BadRequestException;
 import com.socialapp.common.exception.ResourceNotFoundException;
 import com.socialapp.common.exception.UnauthorizedException;
 import com.socialapp.user.dto.UpdateProfileRequest;
@@ -13,10 +14,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -230,5 +236,35 @@ class UserProfileServiceTest {
         verify(userProfileRepository).save(captor.capture());
         assertThat(captor.getValue().getFullName()).isEqualTo("Captured Name");
         assertThat(captor.getValue().getBio()).isEqualTo("Original bio");
+    }
+
+    @Test
+    void search_matchingQuery_returnsMappedPage() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<UserProfile> page = new PageImpl<>(List.of(profile("user-1")), pageable, 1);
+        when(userProfileRepository.findByFullNameContainingIgnoreCase("Alice", pageable)).thenReturn(page);
+
+        Page<UserProfileResponse> result = userProfileService.search("Alice", pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).fullName()).isEqualTo("Alice Original");
+    }
+
+    @Test
+    void search_blankQuery_throwsBadRequestAndNeverQueriesRepository() {
+        Pageable pageable = PageRequest.of(0, 20);
+
+        assertThatThrownBy(() -> userProfileService.search("   ", pageable))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(userProfileRepository, never()).findByFullNameContainingIgnoreCase(any(), any());
+    }
+
+    @Test
+    void search_nullQuery_throwsBadRequest() {
+        Pageable pageable = PageRequest.of(0, 20);
+
+        assertThatThrownBy(() -> userProfileService.search(null, pageable))
+                .isInstanceOf(BadRequestException.class);
     }
 }

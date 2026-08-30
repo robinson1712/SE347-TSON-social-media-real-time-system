@@ -1,5 +1,6 @@
 package com.socialapp.user.service;
 
+import com.socialapp.common.exception.BadRequestException;
 import com.socialapp.common.exception.ResourceNotFoundException;
 import com.socialapp.common.exception.UnauthorizedException;
 import com.socialapp.user.dto.UpdateProfileRequest;
@@ -7,6 +8,8 @@ import com.socialapp.user.dto.UserProfileResponse;
 import com.socialapp.user.entity.UserProfile;
 import com.socialapp.user.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,6 +69,14 @@ public class UserProfileService {
         profile.setCoverUrl(mediaUrl);
         profile.setUpdatedAt(Instant.now());
         return UserProfileResponse.from(userProfileRepository.save(profile));
+    }
+
+    public Page<UserProfileResponse> search(String query, Pageable pageable) {
+        if (query == null || query.isBlank()) {
+            throw new BadRequestException("Search query must not be blank");
+        }
+        return userProfileRepository.findByFullNameContainingIgnoreCase(query, pageable)
+                .map(UserProfileResponse::from);
     }
 
     private UserProfile findOrThrow(String id) {

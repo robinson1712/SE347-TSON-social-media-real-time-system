@@ -130,8 +130,7 @@ rồi chạy service bằng `mvn spring-boot:run` trong từng thư mục `servi
 
 ## Giới hạn còn lại
 
-Chưa có: rate-limit chi tiết hơn ở gateway cho route WebSocket. Một vài đơn giản
-hoá có chủ đích còn lại (ghi rõ trong code bằng comment): `reaction-service` nhận `targetOwnerId`
+Một vài đơn giản hoá có chủ đích còn lại (ghi rõ trong code bằng comment): `reaction-service` nhận `targetOwnerId`
 trực tiếp từ client thay vì tự resolve qua Feign (tránh phải có 3 Feign client cho POST/COMMENT/REEL);
 `fanpage-service` không có khái niệm private page (đúng theo thiết kế — fanpage luôn công khai,
 không cần sửa như group).

@@ -90,19 +90,19 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 |---|---|---|---|
 | `eureka-server` | 8761 | ✅ Xong | — |
 | `config-server` | 8888 | ✅ Xong | Đang bị dùng ít — có thể đẩy thêm config dùng chung (vd. resilience4j defaults) sang đây |
-| `api-gateway` | 8080 | ✅ Xong + rate limit | Route WebSocket `/ws/**` chưa có rate-limit |
+| `api-gateway` | 8080 | ✅ Xong + rate limit (kể cả route WebSocket) | — |
 | `auth-service` | 8081 | ✅ Xong + admin allowlist | Chưa có: reset mật khẩu, xác minh email, khoá tài khoản sau N lần login sai, OAuth2/social login |
-| `user-service` | 8082 | ✅ Xong | Chưa có: tìm kiếm user, gợi ý bạn chung |
-| `media-service` | 8083 | ✅ Xong | Chưa có: resize ảnh/tạo thumbnail, giới hạn dung lượng/loại file, transcode video |
-| `post-service` | 8084 | ✅ Xong + profanity filter + xoá theo report | Chưa có: lịch sử chỉnh sửa, ghim bài |
+| `user-service` | 8082 | ✅ Xong + tìm kiếm user | Chưa có: gợi ý bạn chung |
+| `media-service` | 8083 | ✅ Xong + whitelist content-type + giới hạn size theo purpose | Chưa có: resize ảnh/tạo thumbnail, transcode video |
+| `post-service` | 8084 | ✅ Xong + profanity filter + xoá theo report + ghim bài | Chưa có: lịch sử chỉnh sửa |
 | `comment-service` | 8085 | ✅ Xong + circuit breaker + profanity filter + xoá theo report | — |
 | `reaction-service` | 8086 | ✅ Xong | Đơn giản hoá có chủ đích: nhận `targetOwnerId` từ client thay vì tự resolve qua Feign |
 | `story-service` | 8087 | ✅ Xong + circuit breaker | Chưa có: story highlights (lưu vĩnh viễn), reply story qua chat |
-| `reels-service` | 8088 | ✅ Xong | Feed reels vẫn thuần theo thời gian (chưa áp dụng ranking như feed-service) |
-| `group-service` | 8089 | ✅ Xong + fix visibility | Chưa có: vai trò MODERATOR, kiểm duyệt bài đăng trong group |
+| `reels-service` | 8088 | ✅ Xong + engagement ranking (giống feed-service) | — |
+| `group-service` | 8089 | ✅ Xong + fix visibility + vai trò MODERATOR | Chưa có: kiểm duyệt bài đăng trong group |
 | `fanpage-service` | 8090 | ✅ Xong | Chưa có: thống kê/insight cho page |
-| `dating-service` | 8091 | ✅ Xong + matching algorithm | Chưa có: unmatch, report trong ngữ cảnh dating, xác minh ảnh |
-| `chat-service` | 8092 | ✅ Xong (WebSocket thật) | Chưa có: sửa/xoá tin nhắn, typing indicator, read-receipt chi tiết (hiện chỉ có mark-all-read) |
+| `dating-service` | 8091 | ✅ Xong + matching algorithm + unmatch | Chưa có: report trong ngữ cảnh dating, xác minh ảnh |
+| `chat-service` | 8092 | ✅ Xong (WebSocket thật) + xoá tin nhắn (sender-only) | Chưa có: sửa tin nhắn, typing indicator, read-receipt chi tiết (hiện chỉ có mark-all-read) |
 | `notification-service` | 8093 | ✅ Xong (WebSocket thật) | Chưa có: push notification ra mobile (FCM/APNs), cài đặt loại thông báo |
 | `feed-service` | 8094 | ✅ Xong + engagement ranking | Chưa gộp story/reels vào cùng feed logic |
 | `moderation-service` | 8095 | ✅ Xong (report + admin review queue) | Đã mở rộng đủ 6 loại: post/comment/reels/story/group/fanpage đều nghe `ContentRemovedEvent` |
@@ -311,11 +311,70 @@ chỉ là thay đổi cấu hình/dependency, không sửa logic nghiệp vụ).
 Truy cập: Prometheus UI `http://localhost:9090` (Status → Targets để xem trạng thái scrape); dashboard
 Grafana mở sẵn tại `http://localhost:3000/d/service-overview` (anonymous admin, không cần đăng nhập).
 
+## ✅ Nâng cấp nhỏ theo từng service
+
+8 mục nhỏ, mỗi mục có test riêng (đơn vị + verify thật qua Docker), chọn có chủ đích những thứ thực
+sự "nhỏ" — bỏ qua các mục lớn hơn trong danh sách gốc (OAuth2, resize/transcode video, FCM push...):
+
+1. **`api-gateway`**: thêm `RequestRateLimiter` cho 2 route WebSocket `/ws/**` và `/ws-notifications/**`
+   (trước đó là 2 route duy nhất chưa có rate-limit trong khi mọi route REST khác đều có).
+2. **`user-service`**: `GET /api/users/search?q=` tìm theo `fullName` (substring, không phân biệt hoa
+   thường, phân trang) — email không tìm được vì user-service không lưu email (auth-service giữ).
+3. **`media-service`**: whitelist content-type (chỉ ảnh jpeg/png/gif/webp + video mp4/webm/quicktime,
+   trước đó không chặn gì ngoài dung lượng) và giới hạn riêng 10MB cho ảnh ở các purpose luôn-là-ảnh
+   (AVATAR/COVER/PAGE/GROUP) — purpose có thể là video (POST/STORY/REEL/CHAT) vẫn dùng giới hạn 50MB
+   sẵn có ở tầng servlet.
+4. **`post-service`**: ghim bài (`pinned` field + `PUT`/`DELETE /api/posts/{id}/pin`, chỉ author) —
+   `GET /api/posts/author/{id}` giờ sắp bài ghim lên đầu trước khi sắp theo thời gian.
+5. **`reels-service`**: áp dụng đúng công thức ranking Hacker-News-style của `feed-service`
+   (bounded pool → score → sort → paginate in memory) cho `getFeed` — trước đó thuần theo thời gian.
+6. **`dating-service`**: `DELETE /api/dating/matches/{id}` (unmatch) — chỉ 1 trong 2 người của match.
+7. **`group-service`**: thêm role `MODERATOR` (giữa `ADMIN`/`MEMBER`) — được duyệt thành viên chờ
+   nhưng **không** được xoá thành viên hay đổi role người khác (vẫn ADMIN-only). Thêm
+   `PUT /api/groups/{id}/members/{userId}/role` (ADMIN-only, chặn hạ role ADMIN cuối cùng — cùng
+   pattern "last owner guard" đã có ở `fanpage-service`).
+8. **`chat-service`**: `DELETE /api/chat/messages/{id}` — chỉ sender, soft-delete + xoá sạch
+   `content`/`mediaUrl` (thu hồi thật, không chỉ ẩn) — trả về document đã xoá với `deleted: true`.
+
+Build+test toàn reactor: **18/18 module pass, 364 unit test** (tăng từ 334 — 30 test mới/cập nhật
+qua 7 service). Test đáng chú ý: `ReelServiceTest` copy nguyên bộ test ranking của `FeedQueryServiceTest`
+(cùng age → engagement cao thắng, cùng engagement 0 → mới nhất thắng, engagement khủng thắng cả bài
+mới hơn nhiều, phân trang cắt đúng theo thứ tự đã rank chứ không theo thứ tự query gốc).
+
+**Đã verify bằng luồng thật qua Docker + curl, phát hiện và sửa 2 bug schema-migration thật** (giống
+đúng kiểu lỗi "chỉ lộ ra khi chạy Docker thật với DB đã có dữ liệu" đã ghi nhận nhiều lần trước đây):
+- **Bug 1 — `post-service`**: `ALTER TABLE posts ADD COLUMN pinned boolean NOT NULL` fail với
+  `column "pinned" of relation "posts" contains null values` — `@Builder.Default` chỉ set default ở
+  phía Java, không sinh ra `DEFAULT` ở DDL, nên Postgres không biết backfill giá trị nào cho các dòng
+  đã tồn tại. Sửa: thêm `@Column(columnDefinition = "boolean default false")` vào field `pinned`.
+- **Bug 2 — `group-service`**: promote thành viên lên `MODERATOR` fail với
+  `violates check constraint "group_members_role_check"` — Hibernate 6 tự sinh CHECK constraint cho
+  cột `@Enumerated(STRING)` **tại thời điểm tạo bảng lần đầu** (chỉ biết `ADMIN`/`MEMBER` lúc đó);
+  `ddl-auto: update` không tự sửa lại CHECK constraint khi enum Java có thêm giá trị mới. Đây là giới
+  hạn đã biết của Hibernate `update` mode (không migrate constraint), không phải lỗi code — đã
+  `ALTER TABLE ... DROP/ADD CONSTRAINT` thủ công trên DB dev đang chạy để unblock; một deploy từ volume
+  sạch (`docker compose down -v`) sẽ tự sinh đúng CHECK constraint với cả 3 giá trị ngay từ đầu.
+
+Sau khi sửa cả 2, verify lại toàn bộ và pass thật với dữ liệu Docker + curl:
+1. Search "Zephyr" trả đúng user vừa đăng ký; query rỗng → 400.
+2. Upload `.exe` giả (content-type `application/x-msdownload`) → 400; upload PNG hợp lệ → 200; upload
+   ảnh 11MB cho purpose `avatar` → 400 "AVATAR image must be 10MB or smaller".
+3. Tạo bài cũ rồi bài mới, ghim bài cũ → `GET /api/posts/author/{id}` trả bài cũ (đã ghim) lên đầu.
+4. `reels-service`'s `/api/reels/feed` chạy sạch qua code ranking mới (không lỗi runtime), rỗng vì
+   chưa có reel nào — logic ranking đã cover đầy đủ bằng unit test riêng.
+5. Group role: chủ group promote thành viên lên MODERATOR → 200; MODERATOR đó duyệt được thành viên
+   chờ khác → 200; MODERATOR đó gọi xoá thành viên → **403** (đúng, ADMIN-only).
+6. 2 user tạo hồ sơ dating tương thích, swipe LIKE lẫn nhau → match được tạo; `DELETE
+   /api/dating/matches/{id}` → 200, `GET /api/dating/matches` sau đó rỗng.
+7. Seed 1 message thẳng vào MongoDB, người không phải sender gọi xoá → 403; sender gọi xoá → 200,
+   `content`/`mediaUrl` đều `null`, `deleted: true` — xác nhận bằng cách đọc lại thẳng từ MongoDB.
+8. `api-gateway`: route `/ws/**`/`/ws-notifications/**` vẫn hoạt động bình thường sau khi thêm
+   rate-limit filter (không kiểm thử riêng việc chạm ngưỡng rate-limit).
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
-1. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
-2. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
-3. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+1. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
+2. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 

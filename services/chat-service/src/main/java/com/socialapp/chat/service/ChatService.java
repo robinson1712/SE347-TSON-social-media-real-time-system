@@ -101,6 +101,19 @@ public class ChatService {
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found: " + id));
     }
 
+    /** Sender-only soft delete/recall — scrubs content so it can't be read back via the API. */
+    public Message deleteMessage(String messageId, String userId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
+        if (!message.getSenderId().equals(userId)) {
+            throw new ForbiddenException("Only the sender may delete this message");
+        }
+        message.setDeleted(true);
+        message.setContent(null);
+        message.setMediaUrl(null);
+        return messageRepository.save(message);
+    }
+
     public void ensurePrivateConversation(String user1Id, String user2Id) {
         if (conversationRepository.findPrivateConversation(user1Id, user2Id).isEmpty()) {
             Conversation conversation = Conversation.builder()

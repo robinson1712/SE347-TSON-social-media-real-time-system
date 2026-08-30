@@ -9,7 +9,9 @@ import java.util.List;
 
 public interface PostRepository extends JpaRepository<Post, String> {
 
-    Page<Post> findByAuthorIdOrderByCreatedAtDesc(String authorId, Pageable pageable);
+    // Sort is supplied by the caller (pinned-first for author feeds) rather than
+    // baked into the method name via OrderBy.
+    Page<Post> findByAuthorId(String authorId, Pageable pageable);
 
     Page<Post> findByGroupIdOrderByCreatedAtDesc(String groupId, Pageable pageable);
 

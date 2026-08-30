@@ -59,8 +59,19 @@ public class PostController {
             @PathVariable String authorId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("pinned"), Sort.Order.desc("createdAt")));
         return ResponseEntity.ok(ApiResponse.success(PageResponse.from(postService.getPostsByAuthor(authorId, pageable))));
+    }
+
+    @PutMapping("/{id}/pin")
+    public ResponseEntity<ApiResponse<Post>> pinPost(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.success("Post pinned", postService.pinPost(id)));
+    }
+
+    @DeleteMapping("/{id}/pin")
+    public ResponseEntity<ApiResponse<Post>> unpinPost(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.success("Post unpinned", postService.unpinPost(id)));
     }
 
     @GetMapping("/group/{groupId}")

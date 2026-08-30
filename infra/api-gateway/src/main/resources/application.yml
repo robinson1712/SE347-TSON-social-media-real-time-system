@@ -130,10 +130,22 @@ spring:
           uri: lb:ws://CHAT-SERVICE
           predicates:
             - Path=/ws/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: ${RATE_LIMIT_WS_REPLENISH:5}
+                redis-rate-limiter.burstCapacity: ${RATE_LIMIT_WS_BURST:10}
+                key-resolver: "#{@userOrIpKeyResolver}"
         - id: notification-service-ws
           uri: lb:ws://NOTIFICATION-SERVICE
           predicates:
             - Path=/ws-notifications/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: ${RATE_LIMIT_WS_REPLENISH:5}
+                redis-rate-limiter.burstCapacity: ${RATE_LIMIT_WS_BURST:10}
+                key-resolver: "#{@userOrIpKeyResolver}"
         - id: chat-service
           uri: lb://CHAT-SERVICE
           predicates:
