@@ -87,7 +87,7 @@ curl http://localhost:8080/api/feed/me -H "Authorization: Bearer $TOKEN"
 
 WebSocket (STOMP): chat tại `ws://localhost:8080/ws?token=$TOKEN` (SockJS) hoặc `ws://localhost:8080/ws/websocket?token=$TOKEN` (raw WebSocket, bỏ qua SockJS framing); notification tại `ws://localhost:8080/ws-notifications?token=$TOKEN` (SockJS) hoặc `.../ws-notifications/websocket?token=$TOKEN` (raw) — hai đường dẫn khác nhau vì gateway chỉ route được một service cho mỗi path.
 
-Swagger UI: mỗi service có UI test API riêng trên port của nó, vd `http://localhost:8084/swagger-ui/index.html` (post-service), `http://localhost:8091/swagger-ui/index.html` (dating-service) — xem bảng port ở trên để suy ra URL cho service khác.
+Swagger UI: **1 điểm truy cập chung** qua gateway tại `http://localhost:8080/swagger-ui.html` — dropdown góc trên bên phải để chuyển qua lại giữa 15 business service (không cần nhớ port riêng từng service nữa). Mỗi service vẫn expose Swagger UI riêng trên port của nó nếu cần test trực tiếp không qua gateway, vd `http://localhost:8084/swagger-ui/index.html` (post-service).
 
 Observability: Zipkin UI `http://localhost:9411` (tìm trace theo service/traceId — mọi request qua gateway đều có 100% được trace, kể cả chặng Kafka bất đồng bộ); Grafana `http://localhost:3000` (anonymous admin, không cần đăng nhập) → Explore → datasource Loki để xem log tập trung mọi container, filter theo `{service="auth-service"}` — mỗi dòng log đều có sẵn `[traceId-spanId]` để tra ngược đúng trace trong Zipkin; dashboard **Service Overview** (đã provision sẵn, mở ngay không cần tự tạo) hiển thị request rate/p99 latency/error rate/JVM heap/CPU theo từng service — nguồn Prometheus `http://localhost:9090`, tự phát hiện service cần scrape qua Eureka thay vì liệt kê tay.
 

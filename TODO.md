@@ -371,10 +371,50 @@ Sau khi sửa cả 2, verify lại toàn bộ và pass thật với dữ liệu 
 8. `api-gateway`: route `/ws/**`/`/ws-notifications/**` vẫn hoạt động bình thường sau khi thêm
    rate-limit filter (không kiểm thử riêng việc chạm ngưỡng rate-limit).
 
+## ✅ Gộp Swagger UI qua gateway
+
+Trước đây mỗi service có Swagger UI riêng trên port của nó — phải nhớ 15 port khác nhau. Giờ có
+**1 điểm truy cập chung** tại `http://localhost:8080/swagger-ui.html`, dùng đúng tính năng aggregation
+có sẵn của springdoc (`springdoc.swagger-ui.urls`), không cần viết code custom:
+
+- **`api-gateway`** thêm `springdoc-openapi-starter-webflux-ui` (bản reactive — api-gateway chạy
+  Spring Cloud Gateway/WebFlux, không phải MVC nên không dùng chung artifact `-webmvc-ui` mà 15
+  service kia đang dùng).
+- **15 route mới** dạng `/docs/{service}/v3/api-docs` → `lb://{SERVICE}` + `RewritePath` về `/v3/api-docs`
+  thật của từng service — gateway đóng vai trò proxy thuần, không tự sinh OpenAPI doc nào.
+- **`springdoc.swagger-ui.urls`** liệt kê cả 15 route trên → UI hiện dropdown chọn service (giống hệt
+  cách nhiều dự án dùng Spring Cloud Gateway + springdoc để aggregate docs — không phải pattern tự nghĩ).
+- **`JwtAuthenticationFilter`**: thêm `/swagger-ui.html`, `/swagger-ui/**`, `/webjars/**`,
+  `/v3/api-docs/**`, `/docs/**` vào danh sách public — nếu không, mở Swagger UI sẽ bị chặn đòi JWT.
+
+**Lưu ý đã biết** (ghi lại để không quên khi thêm service mới, tránh lặp lại đúng kiểu lỗi
+"danh sách bị quên" đã gặp ở CI/Prometheus trước đây — khác là ở đây Prometheus tự phát hiện qua Eureka
+được, còn route proxy docs thì không thể tự động hoá tương tự vì springdoc's `swagger-ui.urls` cần
+biết trước danh sách tên hiển thị, nên đây là 1 trong số ít chỗ còn phải cập nhật tay khi thêm service):
+thêm service mới phải nhớ thêm cả route `/docs/{service}/v3/api-docs` lẫn 1 dòng trong
+`springdoc.swagger-ui.urls`.
+
+**Đã verify bằng dữ liệu thật qua Docker + curl**:
+1. `GET /swagger-ui.html` → redirect 302 → theo redirect ra đúng trang HTML Swagger UI (200).
+2. `GET /docs/post-service/v3/api-docs`, `/docs/dating-service/...`, `/docs/group-service/...`,
+   `/docs/auth-service/...`, `/docs/moderation-service/...` — cả 5 đều trả đúng OpenAPI JSON thật
+   được proxy từ service tương ứng (không phải 401/404); `group-service`'s doc còn thấy đúng cả
+   endpoint `PUT /api/groups/{id}/members/{userId}/role` mới thêm ở đợt "nâng cấp nhỏ" trước đó.
+3. `GET /v3/api-docs/swagger-config` → JSON liệt kê đúng đủ 15 service cho dropdown.
+4. **Regression check**: `GET /api/posts/1` không kèm token → vẫn **401** như trước — xác nhận danh
+   sách public-path mới không vô tình mở toang route API thật nào.
+
+Sự cố ngoài lề lúc verify: Docker Desktop bị treo engine (`docker ps` timeout hoàn toàn, không phải
+lỗi code) — người dùng tự khởi động lại Docker Desktop; sau khi lên lại, `comment-service` bị kill
+(exit 137, đúng lúc Docker Desktop restart) nên tạm thời rớt khỏi Eureka — `docker start` lại là xong,
+không phải bug liên quan đến thay đổi lần này.
+
+Build+test toàn reactor trước khi redeploy: **18/18 module pass** (không đổi số test vì đây chỉ là
+thay đổi cấu hình/routing, không sửa logic nghiệp vụ).
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
-1. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
-2. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+1. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 
