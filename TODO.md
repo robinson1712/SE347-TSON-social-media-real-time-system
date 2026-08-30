@@ -270,12 +270,52 @@ cleanup (bảng phụ thuộc `GroupMember`, `PageAdmin`/`PageFollower`):
 `reels-service`/`story-service` dùng đúng pattern đơn giản hơn (không có bảng phụ thuộc, giống hệt
 post-service) nên không lặp lại live-verify — đã được cover đầy đủ qua unit test.
 
+## ✅ Metrics/dashboard (Prometheus + Grafana)
+
+Hoàn thiện mảnh cuối của observability (đã có tracing qua Zipkin + log tập trung qua Loki từ trước):
+
+- **`micrometer-registry-prometheus`** thêm vào `common-lib` (1 chỗ, tự động có ở mọi service phụ
+  thuộc common-lib thay vì sửa tay 15 pom riêng lẻ) + thêm trực tiếp vào `eureka-server`/`config-server`
+  (2 service không phụ thuộc common-lib). Bật `/actuator/prometheus` (`exposure.include`) và
+  `management.metrics.distribution.percentiles-histogram.http.server.requests: true` (cần cho
+  `histogram_quantile` tính p99 — thiếu dòng này thì Prometheus không có bucket data) ở cả 18 file
+  `application.yml`.
+- **Prometheus tự phát hiện service qua Eureka** (`eureka_sd_configs`) thay vì liệt kê tay từng
+  service/port trong `prometheus.yml` — cố ý tránh lặp lại đúng lỗi vừa gặp ở CI (`moderation-service`
+  bị quên trong danh sách cứng `SERVICES` của `ci-cd.yml`, xem mục CI/CD ở trên). Riêng `eureka-server`
+  tự nó không đăng ký làm Eureka client (`register-with-eureka: false` vì nó chính là registry) nên
+  không thể được Eureka SD phát hiện — phải scrape tĩnh riêng 1 job cho nó.
+- **Dashboard Grafana "Service Overview" provision sẵn** (file JSON + provider config mount qua
+  Docker volume, không cần tự tạo tay lúc demo): 6 panel — services up (stat), request rate theo
+  service, p99 latency theo service, error rate 5xx % theo service, JVM heap dùng theo service, CPU
+  usage theo service.
+
+**Đã verify bằng dữ liệu Prometheus/Grafana thật** (không chỉ container "Up"), sau khi redeploy full
+18 service + container `prometheus` mới:
+1. `GET /api/v1/targets` → **18/18 target `health: up`** (17 service qua `eureka-discovered-services`
+   job tự phát hiện + 1 `eureka-server` scrape tĩnh) — đúng số lượng service hiện có.
+2. `GET /actuator/prometheus` trên `post-service` → có `http_server_requests_seconds_bucket` (69
+   dòng, đủ bucket cho `histogram_quantile`) và `jvm_memory_used_bytes` (10 dòng).
+3. Tạo traffic thật qua gateway (đăng ký user, 20 lần tạo post + đọc, vài request 404) rồi query trực
+   tiếp đúng 4 công thức dashboard dùng: **request rate theo service có số liệu thật** (`POST-SERVICE`
+   0.65 req/s, `API-GATEWAY` 0.6 req/s — cao nhất, đúng nơi traffic đổ vào), **p99 latency theo service
+   có số liệu thật** cho toàn bộ 16/16 service có traffic, **error rate 5xx trả tập rỗng đúng** (chưa
+   có lỗi 5xx nào xảy ra — không phải bug), **services-up count = 18** khớp số target.
+4. `GET /api/search` trên Grafana → dashboard `service-overview` đã tự provision, không cần tạo tay.
+   `GET /api/datasources` → datasource Prometheus (`uid: prometheus`) đã đăng ký đúng, khớp UID dashboard JSON tham chiếu.
+5. `GET /api/dashboards/uid/service-overview` → cả 6 panel load đúng title, không panel nào lỗi do sai UID/query.
+
+Build+test toàn reactor trước khi redeploy: **18/18 module pass** (334 unit test, không đổi vì đây
+chỉ là thay đổi cấu hình/dependency, không sửa logic nghiệp vụ).
+
+Truy cập: Prometheus UI `http://localhost:9090` (Status → Targets để xem trạng thái scrape); dashboard
+Grafana mở sẵn tại `http://localhost:3000/d/service-overview` (anonymous admin, không cần đăng nhập).
+
 ## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
 
-1. **Metrics/dashboard** — đã có tracing+log, còn thiếu Prometheus (metrics) + dashboard Grafana trực quan (request rate, latency p99, error rate theo service) — cố ý bỏ qua đợt trước để không thêm quá nhiều container cùng lúc.
-2. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
-3. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
-4. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+1. **Nâng cấp nhỏ theo từng service** — xem cột "Còn thiếu" ở bảng trên.
+2. **(tuỳ chọn) Gộp Swagger UI qua gateway** thành 1 điểm truy cập chung thay vì phải nhớ port từng service.
+3. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 

@@ -35,6 +35,7 @@ Client (Web/Mobile)
   Kafka — giao tiếp bất đồng bộ giữa các service (post/comment/reaction/group/page/match/message events)
 
   Observability: Zipkin (9411, distributed tracing) — Loki+Promtail+Grafana (3000, log tập trung)
+                — Prometheus (9090, metrics, tự phát hiện service qua Eureka) + dashboard Grafana có sẵn
 ```
 
 Chi tiết đầy đủ: xem `docs/plan.md` hoặc lịch sử trò chuyện đã tạo ra hệ thống này.
@@ -88,7 +89,7 @@ WebSocket (STOMP): chat tại `ws://localhost:8080/ws?token=$TOKEN` (SockJS) ho�
 
 Swagger UI: mỗi service có UI test API riêng trên port của nó, vd `http://localhost:8084/swagger-ui/index.html` (post-service), `http://localhost:8091/swagger-ui/index.html` (dating-service) — xem bảng port ở trên để suy ra URL cho service khác.
 
-Observability: Zipkin UI `http://localhost:9411` (tìm trace theo service/traceId — mọi request qua gateway đều có 100% được trace, kể cả chặng Kafka bất đồng bộ); Grafana `http://localhost:3000` (anonymous admin, không cần đăng nhập) → Explore → datasource Loki để xem log tập trung mọi container, filter theo `{service="auth-service"}` — mỗi dòng log đều có sẵn `[traceId-spanId]` để tra ngược đúng trace trong Zipkin.
+Observability: Zipkin UI `http://localhost:9411` (tìm trace theo service/traceId — mọi request qua gateway đều có 100% được trace, kể cả chặng Kafka bất đồng bộ); Grafana `http://localhost:3000` (anonymous admin, không cần đăng nhập) → Explore → datasource Loki để xem log tập trung mọi container, filter theo `{service="auth-service"}` — mỗi dòng log đều có sẵn `[traceId-spanId]` để tra ngược đúng trace trong Zipkin; dashboard **Service Overview** (đã provision sẵn, mở ngay không cần tự tạo) hiển thị request rate/p99 latency/error rate/JVM heap/CPU theo từng service — nguồn Prometheus `http://localhost:9090`, tự phát hiện service cần scrape qua Eureka thay vì liệt kê tay.
 
 ### Chạy từng service riêng lẻ khi phát triển (không qua Docker)
 
@@ -129,8 +130,7 @@ rồi chạy service bằng `mvn spring-boot:run` trong từng thư mục `servi
 
 ## Giới hạn còn lại
 
-Chưa có: rate-limit chi tiết hơn ở gateway cho route WebSocket, Prometheus/Grafana metrics dashboard,
-mở rộng content moderation sang reels/story/group/fanpage (hiện chỉ post/comment). Một vài đơn giản
+Chưa có: rate-limit chi tiết hơn ở gateway cho route WebSocket. Một vài đơn giản
 hoá có chủ đích còn lại (ghi rõ trong code bằng comment): `reaction-service` nhận `targetOwnerId`
 trực tiếp từ client thay vì tự resolve qua Feign (tránh phải có 3 Feign client cho POST/COMMENT/REEL);
 `fanpage-service` không có khái niệm private page (đúng theo thiết kế — fanpage luôn công khai,
