@@ -51,9 +51,26 @@ public class Post {
     @Builder.Default
     private Privacy privacy = Privacy.PUBLIC;
 
+    // Only meaningful when privacy == CUSTOM — the explicit viewer allow-list.
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "post_custom_audience", joinColumns = @jakarta.persistence.JoinColumn(name = "post_id"))
+    @Column(name = "user_id")
+    @Builder.Default
+    private List<String> customAudienceUserIds = new ArrayList<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "post_tagged_users", joinColumns = @jakarta.persistence.JoinColumn(name = "post_id"))
+    @Column(name = "user_id")
+    @Builder.Default
+    private List<String> taggedUserIds = new ArrayList<>();
+
     private String groupId;
 
     private String pageId;
+
+    // Non-null when this post is a share/repost of another post; the shared post
+    // is fetched separately (GET /api/posts/{sharedPostId}) rather than embedded.
+    private String sharedPostId;
 
     @Builder.Default
     private int commentCount = 0;
@@ -64,10 +81,16 @@ public class Post {
     // Explicit SQL-level DEFAULT — without it, Hibernate's ALTER TABLE ADD COLUMN
     // ... NOT NULL (no default) fails against a posts table that already has rows,
     // since Postgres has no way to backfill the existing rows. @Builder.Default
-    // alone only affects the Java-side builder, not the generated DDL.
+    // alone only affects the Java-side builder, not the generated DDL. Same
+    // reasoning applies to shareCount below (see "pinned" — this bit us for real
+    // once already when adding the pinned column against a populated table).
     @Builder.Default
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean pinned = false;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int shareCount = 0;
 
     private Instant createdAt;
 

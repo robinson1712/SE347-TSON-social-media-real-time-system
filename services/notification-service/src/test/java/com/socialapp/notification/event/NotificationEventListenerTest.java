@@ -5,6 +5,7 @@ import com.socialapp.common.event.FriendRequestEvent;
 import com.socialapp.common.event.GroupEvent;
 import com.socialapp.common.event.MatchEvent;
 import com.socialapp.common.event.MessageEvent;
+import com.socialapp.common.event.PostTaggedEvent;
 import com.socialapp.common.event.ReactionEvent;
 import com.socialapp.notification.document.Notification;
 import com.socialapp.notification.document.NotificationType;
@@ -242,6 +243,33 @@ class NotificationEventListenerTest {
         MessageEvent event = new MessageEvent("m1", "conv-1", "alice", null, "hey", Instant.now());
 
         listener.onMessage(event);
+
+        verify(notificationRepository, never()).save(any());
+    }
+
+    // ---- PostTaggedEvent ----
+
+    @Test
+    void onPostTagged_authorNotTaggedUser_notifiesTaggedUser() {
+        stubSaveEcho();
+        PostTaggedEvent event = new PostTaggedEvent("post-1", "alice", "bob", Instant.now());
+
+        listener.onPostTagged(event);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertThat(captor.getValue().getRecipientId()).isEqualTo("bob");
+        assertThat(captor.getValue().getActorId()).isEqualTo("alice");
+        assertThat(captor.getValue().getType()).isEqualTo(NotificationType.TAG);
+        assertThat(captor.getValue().getTargetType()).isEqualTo("POST");
+        assertThat(captor.getValue().getTargetId()).isEqualTo("post-1");
+    }
+
+    @Test
+    void onPostTagged_authorTaggedSelf_skipped() {
+        PostTaggedEvent event = new PostTaggedEvent("post-1", "alice", "alice", Instant.now());
+
+        listener.onPostTagged(event);
 
         verify(notificationRepository, never()).save(any());
     }

@@ -378,6 +378,15 @@ services:
       - kafka
       - eureka-server
 
+  search-service:
+    build: ./services/search-service
+    container_name: sma-search-service
+    environment: *app-env
+    ports:
+      - "8096:8096"
+    depends_on:
+      - eureka-server
+
 volumes:
   pg_data:
   mongo_data:

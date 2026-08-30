@@ -45,6 +45,7 @@
         <module>services/notification-service</module>
         <module>services/feed-service</module>
         <module>services/moderation-service</module>
+        <module>services/search-service</module>
     </modules>
 
     <dependencyManagement>

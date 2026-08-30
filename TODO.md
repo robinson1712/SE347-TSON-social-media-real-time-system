@@ -94,7 +94,7 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 | `auth-service` | 8081 | ✅ Xong + admin allowlist | Chưa có: reset mật khẩu, xác minh email, khoá tài khoản sau N lần login sai, OAuth2/social login |
 | `user-service` | 8082 | ✅ Xong + tìm kiếm user | Chưa có: gợi ý bạn chung |
 | `media-service` | 8083 | ✅ Xong + whitelist content-type + giới hạn size theo purpose | Chưa có: resize ảnh/tạo thumbnail, transcode video |
-| `post-service` | 8084 | ✅ Xong + profanity filter + xoá theo report + ghim bài | Chưa có: lịch sử chỉnh sửa |
+| `post-service` | 8084 | ✅ Xong + profanity filter + xoá theo report + ghim bài + share/tag/custom-audience + enforce privacy lúc đọc | Chưa có: lịch sử chỉnh sửa |
 | `comment-service` | 8085 | ✅ Xong + circuit breaker + profanity filter + xoá theo report | — |
 | `reaction-service` | 8086 | ✅ Xong | Đơn giản hoá có chủ đích: nhận `targetOwnerId` từ client thay vì tự resolve qua Feign |
 | `story-service` | 8087 | ✅ Xong + circuit breaker | Chưa có: story highlights (lưu vĩnh viễn), reply story qua chat |
@@ -106,8 +106,9 @@ Build+test toàn reactor (`mvn clean install`, không `-DskipTests`): **18/18 mo
 | `notification-service` | 8093 | ✅ Xong (WebSocket thật) | Chưa có: push notification ra mobile (FCM/APNs), cài đặt loại thông báo |
 | `feed-service` | 8094 | ✅ Xong + engagement ranking | Chưa gộp story/reels vào cùng feed logic |
 | `moderation-service` | 8095 | ✅ Xong (report + admin review queue) | Đã mở rộng đủ 6 loại: post/comment/reels/story/group/fanpage đều nghe `ContentRemovedEvent` |
+| `search-service` | 8096 | ✅ Xong (tìm kiếm tổng hợp, không có DB riêng) | Chưa có: xếp hạng kết quả theo độ liên quan (hiện chỉ trả theo thứ tự mỗi service tự sắp) |
 
-**15/15 business service + 3/3 hạ tầng đều đã hoàn thành scaffold và build được** — không có service nào còn ở dạng rỗng/chưa code.
+**16/16 business service + 3/3 hạ tầng đều đã hoàn thành scaffold và build được** — không có service nào còn ở dạng rỗng/chưa code. (16 = 15 service ban đầu + `search-service` mới thêm; `moderation-service` đã tính trong 15 đó.)
 
 ---
 
@@ -444,11 +445,88 @@ Cách dùng khi deploy production: set `TRACING_SAMPLING_PROBABILITY=0.1` (hoặ
 `x-app-env` của `docker-compose.yml`, hoặc riêng từng service nếu muốn mức sampling khác nhau —
 không cần rebuild image.
 
+## ✅ Share/repost, tag người dùng, custom audience privacy, tìm kiếm tổng hợp
+
+4 tính năng "phải có" trước khi bắt tay Frontend Web (theo audit so sánh với Facebook thật — xem đoạn
+audit trước đó trong lịch sử làm việc; Events cố ý bỏ qua theo yêu cầu):
+
+1. **Share/repost** (`post-service`): `POST /api/posts/{id}/share` — tạo 1 `Post` mới với
+   `sharedPostId` trỏ về bài gốc + `content` là lời bình khi chia sẻ (như hộp thoại share của
+   Facebook). Bài gốc tăng `shareCount`. Không cho chia sẻ bài mình không có quyền xem (dùng lại đúng
+   logic `canView` bên dưới).
+2. **Tag người dùng vào bài viết** (`post-service` + `notification-service`): `Post` có thêm
+   `taggedUserIds`. Tạo bài mới → publish 1 event `PostTaggedEvent` (topic `post-tagged-events`) cho
+   mỗi người được tag. Sửa bài → chỉ publish event cho người **mới** được tag thêm (diff với danh sách
+   cũ), tránh spam thông báo lại cho người đã tag từ trước. `notification-service` thêm
+   `NotificationType.TAG` + listener mới.
+3. **Custom audience privacy** (`post-service`): enum `Privacy` thêm giá trị `CUSTOM` (đã có sẵn
+   `FRIENDS` từ trước, chỉ thiếu `CUSTOM`). `Post` thêm `customAudienceUserIds` — danh sách user được
+   xem khi `privacy=CUSTOM`. **Đây là lần đầu tiên post-service thực sự enforce privacy lúc đọc** —
+   trước đó `privacy` chỉ là field trang trí, `getPost`/`getPostsByAuthor`/... không hề kiểm tra gì.
+   Thêm `canView(post, viewerId)`: PUBLIC luôn thấy, PRIVATE chỉ tác giả, FRIENDS gọi Feign sang
+   `user-service` lấy `friend-ids` để kiểm tra, CUSTOM kiểm tra trong danh sách allow-list. Áp dụng ở
+   `getPostsByAuthor`/`getPostsByGroup`/`getPostsByPage` (lọc kết quả sau khi query) — **cố ý không**
+   áp dụng ở `GET /api/posts/{id}` và `/batch` vì 2 endpoint này còn được gọi nội bộ qua Feign bởi
+   comment-service/feed-service (không mang theo viewer identity vì Feign không tự động forward
+   header `X-User-Id` — chưa có `RequestInterceptor` cho việc này), enforce ở đó sẽ chặn nhầm mọi
+   Feign call. Đây là giới hạn đã biết, ghi rõ trong code.
+4. **Tìm kiếm tổng hợp** (`search-service`, service thứ 19, port 8096): service mới **không có DB
+   riêng**, chỉ tổng hợp qua 4 Feign client (user/group/fanpage/post-service) — mỗi client có
+   circuit breaker + fallback riêng (degrade về rỗng nếu 1 service down, không sập cả search).
+   `post-service` phải thêm mới `GET /api/posts/search` (trước đó chưa có tìm nội dung bài viết, cố ý
+   giới hạn chỉ tìm bài PUBLIC — an toàn cho mọi caller kể cả Feign không có viewer identity).
+   `GET /api/search?q=&limit=` trả về gộp cả 4 loại kết quả.
+
+**Đã verify bằng dữ liệu thật qua Docker + curl**, và trong quá trình verify gặp liên tiếp nhiều sự
+cố hạ tầng thật (không phải lỗi logic nghiệp vụ) — ghi lại đầy đủ vì đây là bài học đáng giá:
+
+- **Sự cố Docker Desktop**: engine bị treo hoàn toàn giữa chừng (không phải do session này gây ra) —
+  `docker ps` timeout ở mọi shell (Git Bash lẫn PowerShell), trong khi GUI vẫn hiển thị "Engine
+  running" (dữ liệu cache). Chẩn đoán qua `wsl --list --verbose`: distro `docker-desktop-data` (chứa
+  toàn bộ volume) biến mất khỏi danh sách dù `docker-desktop` (engine) vẫn "Running". File dữ liệu
+  thật (`docker_data.vhdx`, ~40GB) vẫn còn nguyên trên đĩa — **không mất dữ liệu**, chỉ là WSL distro
+  chưa đăng ký lại. Khắc phục: người dùng Quit hẳn Docker Desktop từ system tray (không chỉ đóng cửa
+  sổ) rồi mở lại — engine tự đăng ký lại đúng, mọi container/volume/image phục hồi nguyên vẹn.
+- **Bug thật — stale Docker image sau sự cố**: sau khi Docker phục hồi, `post-service` và
+  `notification-service` chạy nhầm **image cũ** (thiếu hẳn code mới — API response thiếu
+  `taggedUserIds`/`shareCount`/..., `notification-service` thiếu consumer cho topic
+  `post-tagged-events`) dù `docker compose up -d --build` trước đó báo thành công. Xác nhận bằng cách
+  trích bytecode `Post.class` từ trong container so với JAR thật trên host (host có đủ field, container
+  thì không) — kết luận: build bị gián đoạn giữa chừng bởi sự cố Docker, một số service build xong
+  trước khi crash, một số thì không, nhưng lệnh `docker compose up -d --build` vẫn trả về exit 0. Sửa:
+  `docker compose build` (không cache) lại toàn bộ + `docker compose up -d` — Docker chỉ recreate
+  đúng những container có image thay đổi thật (post-service không bị recreate lại vì đã tự sửa trước
+  đó bằng `--no-cache` riêng).
+- **Bug thật — CHECK constraint cũ trên cột `privacy`**: y hệt lỗi đã gặp với `MemberRole` của
+  group-service — Hibernate tự sinh CHECK constraint lúc tạo bảng lần đầu (chỉ biết
+  PUBLIC/FRIENDS/PRIVATE), `ddl-auto: update` không tự sửa lại khi enum có thêm `CUSTOM`. Tạo post
+  CUSTOM lần đầu fail với `violates check constraint "posts_privacy_check"`. Sửa thủ công trên DB dev
+  (`DROP`/`ADD CONSTRAINT` với đủ 4 giá trị) — một volume sạch sẽ tự sinh đúng ngay từ đầu.
+- **Sự cố phụ — Postgres hết connection**: `too many clients already` khi cố mở 1 kết nối `psql` thủ
+  công, do ~13 service Postgres-backed × HikariCP pool mặc định 10 connection cộng dồn gần chạm
+  `max_connections` mặc định 100 của Postgres — càng dễ xảy ra sau 1 đợt restart hàng loạt (mọi pool
+  cùng reconnect). Sửa tạm bằng cách restart container `postgres` (giải phóng hết connection, dữ liệu
+  an toàn trong volume). **Chưa sửa tận gốc** — nên hạ `spring.datasource.hikari.maximum-pool-size`
+  ở từng service hoặc tăng `max_connections` nếu tiếp tục mở rộng số service dùng Postgres.
+
+Sau khi sửa hết, verify lại toàn bộ và pass thật:
+1. A tạo bài tag B → response có đúng `taggedUserIds`; B có thông báo `type: TAG` với đúng `targetId`.
+2. A tạo bài, B share kèm lời bình → bài share có `sharedPostId` trỏ đúng bài gốc; `GET` lại bài gốc
+   thấy `shareCount: 1`.
+3. A tạo bài `privacy: CUSTOM, customAudienceUserIds: [B]` → B xem `GET /api/posts/author/A` thấy bài
+   này, C (không có trong audience) xem cùng endpoint **không** thấy.
+4. `GET /api/search?q=Feature` → trả đúng cả 3 user có tên chứa "Feature"; `?q=share` → trả đúng bài
+   viết có nội dung chứa "share" — xác nhận search-service thật sự tổng hợp từ các service thật, không
+   phải rơi vào fallback rỗng.
+
+Build+test toàn reactor trước khi redeploy: **19/19 module pass, 389 unit test** (tăng từ 364).
+
 ## Việc cần làm tiếp theo
 
-**Không còn mục nào trong backlog đề xuất trước đó** — cả 2 mục tuỳ chọn còn lại (gộp Swagger UI, hạ
-sampling probability) đã hoàn thành. Việc tiếp theo (nếu có) nên xuất phát từ yêu cầu mới của người
-dùng hoặc từ cột "Còn thiếu" ở bảng trạng thái từng service phía trên.
+Backlog đề xuất trước đó đã xong hết. Từ audit so sánh với Facebook thật, còn các mục **cố ý chưa làm**
+(không nằm trong yêu cầu lần này): Events, Save/Bookmark bài viết, activity log/2FA, và các mục nhỏ
+theo từng service đã ghi ở cột "Còn thiếu" trong bảng trạng thái phía trên. Việc tiếp theo nên xuất
+phát từ yêu cầu mới của người dùng.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 

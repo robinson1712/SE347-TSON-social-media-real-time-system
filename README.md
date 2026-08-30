@@ -29,7 +29,8 @@ Client (Web/Mobile)
         ├── chat-service (8092)          MongoDB: chat_db + Redis (presence) — WebSocket /ws
         ├── notification-service (8093)  MongoDB: notification_db — WebSocket /ws
         ├── feed-service (8094)          Redis (sorted set fanout)
-        └── moderation-service (8095)    Postgres: moderation_db — user report + admin review queue
+        ├── moderation-service (8095)    Postgres: moderation_db — user report + admin review queue
+        └── search-service (8096)        Không có DB riêng — tổng hợp qua Feign (user/group/fanpage/post)
 
   Config Server (8888) — cấp config tập trung (native, đọc từ ./config-repo)
   Kafka — giao tiếp bất đồng bộ giữa các service (post/comment/reaction/group/page/match/message events)
@@ -83,6 +84,13 @@ curl -X POST http://localhost:8080/api/posts -H "Authorization: Bearer $TOKEN" \
 
 # Xem feed
 curl http://localhost:8080/api/feed/me -H "Authorization: Bearer $TOKEN"
+
+# Chia sẻ lại 1 bài viết
+curl -X POST http://localhost:8080/api/posts/<postId>/share -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"content":"Xem cái này nè!","privacy":"PUBLIC"}'
+
+# Tìm kiếm tổng hợp (user + group + fanpage + post)
+curl "http://localhost:8080/api/search?q=Nguyen&limit=5" -H "Authorization: Bearer $TOKEN"
 ```
 
 WebSocket (STOMP): chat tại `ws://localhost:8080/ws?token=$TOKEN` (SockJS) hoặc `ws://localhost:8080/ws/websocket?token=$TOKEN` (raw WebSocket, bỏ qua SockJS framing); notification tại `ws://localhost:8080/ws-notifications?token=$TOKEN` (SockJS) hoặc `.../ws-notifications/websocket?token=$TOKEN` (raw) — hai đường dẫn khác nhau vì gateway chỉ route được một service cho mỗi path.
@@ -132,6 +140,14 @@ rồi chạy service bằng `mvn spring-boot:run` trong từng thư mục `servi
   `fanpage-service` xoá cascade cả bảng thành viên/follower/admin liên quan). Set biến môi trường
   `ADMIN_EMAILS=admin@social.app,...` (comma-separated) trước khi build `auth-service` để các email
   đó tự động có role `ADMIN` lúc đăng ký.
+- **Share/repost, tag người dùng, custom audience privacy** (`post-service`): `POST /api/posts/{id}/share`
+  chia sẻ lại 1 bài (kèm lời bình, tăng `shareCount` bài gốc); tạo/sửa bài có thể kèm `taggedUserIds`
+  (thông báo `type: TAG` cho người được tag); `privacy: CUSTOM` + `customAudienceUserIds` giới hạn
+  người xem theo danh sách cụ thể. **Post-service giờ mới thực sự enforce privacy lúc đọc**
+  (`getPostsByAuthor`/`ByGroup`/`ByPage`) — `FRIENDS` gọi Feign sang `user-service` kiểm tra bạn bè.
+- **Tìm kiếm tổng hợp** (`search-service`, port 8096): `GET /api/search?q=&limit=` gộp kết quả từ
+  user/group/fanpage/post-service qua Feign (mỗi client có circuit breaker + fallback rỗng riêng —
+  1 service down không sập cả search). Không có database riêng.
 
 ## Giới hạn còn lại
 

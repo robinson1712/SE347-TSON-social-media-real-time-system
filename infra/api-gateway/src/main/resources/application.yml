@@ -186,6 +186,16 @@ spring:
                 redis-rate-limiter.replenishRate: ${RATE_LIMIT_REPLENISH:20}
                 redis-rate-limiter.burstCapacity: ${RATE_LIMIT_BURST:40}
                 key-resolver: "#{@userOrIpKeyResolver}"
+        - id: search-service
+          uri: lb://SEARCH-SERVICE
+          predicates:
+            - Path=/api/search/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: ${RATE_LIMIT_REPLENISH:20}
+                redis-rate-limiter.burstCapacity: ${RATE_LIMIT_BURST:40}
+                key-resolver: "#{@userOrIpKeyResolver}"
 
         # ---------- Aggregated Swagger docs (one UI at /swagger-ui.html instead
         # of 15 separate per-service ports) — each route proxies a single
@@ -283,6 +293,12 @@ spring:
             - Path=/docs/moderation-service/v3/api-docs
           filters:
             - RewritePath=/docs/moderation-service/v3/api-docs, /v3/api-docs
+        - id: search-service-docs
+          uri: lb://SEARCH-SERVICE
+          predicates:
+            - Path=/docs/search-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/search-service/v3/api-docs, /v3/api-docs
 
 springdoc:
   swagger-ui:
@@ -318,6 +334,8 @@ springdoc:
         url: /docs/feed-service/v3/api-docs
       - name: moderation-service
         url: /docs/moderation-service/v3/api-docs
+      - name: search-service
+        url: /docs/search-service/v3/api-docs
 
 jwt:
   secret: ${JWT_SECRET:change-this-social-app-jwt-secret-key-must-be-at-least-256-bits}

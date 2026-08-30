@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build & test (18 modules, 334 unit tests)
+    name: Build & test (19 modules, 389 unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,12 +24,12 @@ jobs:
           java-version: "17"
           cache: maven
 
-      # Builds all 18 modules and runs every unit test (the Testcontainers
+      # Builds all 19 modules and runs every unit test (the Testcontainers
       # integration test in group-service is excluded from this by design —
       # see maven-surefire-plugin config in services/group-service/pom.xml —
       # it's run explicitly in the next step instead, on a runner that can
       # actually reach Docker).
-      - name: mvn clean install (build + 334 unit tests)
+      - name: mvn clean install (build + 389 unit tests)
         run: mvn -B clean install
 
       # GitHub-hosted ubuntu runners have a real Docker daemon, unlike the
@@ -94,7 +94,8 @@ jobs:
             services/post-service services/comment-service services/reaction-service \
             services/story-service services/reels-service services/group-service \
             services/fanpage-service services/dating-service services/chat-service \
-            services/notification-service services/feed-service services/moderation-service"
+            services/notification-service services/feed-service services/moderation-service \
+            services/search-service"
 
           # GHCR occasionally answers a push with "unknown blob" when a layer
           # shared with an already-pushed image (e.g. the common JRE base) is
