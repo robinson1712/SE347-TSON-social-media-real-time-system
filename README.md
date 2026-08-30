@@ -91,6 +91,11 @@ Swagger UI: **1 điểm truy cập chung** qua gateway tại `http://localhost:8
 
 Observability: Zipkin UI `http://localhost:9411` (tìm trace theo service/traceId — mọi request qua gateway đều có 100% được trace, kể cả chặng Kafka bất đồng bộ); Grafana `http://localhost:3000` (anonymous admin, không cần đăng nhập) → Explore → datasource Loki để xem log tập trung mọi container, filter theo `{service="auth-service"}` — mỗi dòng log đều có sẵn `[traceId-spanId]` để tra ngược đúng trace trong Zipkin; dashboard **Service Overview** (đã provision sẵn, mở ngay không cần tự tạo) hiển thị request rate/p99 latency/error rate/JVM heap/CPU theo từng service — nguồn Prometheus `http://localhost:9090`, tự phát hiện service cần scrape qua Eureka thay vì liệt kê tay.
 
+Tracing sampling mặc định 100% (`TRACING_SAMPLING_PROBABILITY`, mặc định `1.0` nếu không set) — hợp lý
+cho demo/dev vì mọi request đều thấy được trace ngay. Deploy production nên hạ xuống (vd `0.1` = 10%)
+để giảm overhead + dung lượng lưu trữ Zipkin: set biến môi trường này trong `x-app-env` của
+`docker-compose.yml` (hoặc theo từng service riêng nếu muốn khác nhau), không cần rebuild image.
+
 ### Chạy từng service riêng lẻ khi phát triển (không qua Docker)
 
 Cần Postgres/MongoDB/Redis/Kafka/MinIO chạy sẵn (có thể `docker compose up postgres mongodb redis kafka minio -d`

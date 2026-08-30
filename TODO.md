@@ -412,9 +412,43 @@ không phải bug liên quan đến thay đổi lần này.
 Build+test toàn reactor trước khi redeploy: **18/18 module pass** (không đổi số test vì đây chỉ là
 thay đổi cấu hình/routing, không sửa logic nghiệp vụ).
 
-## Việc cần làm tiếp theo (theo thứ tự ưu tiên đề xuất)
+## ✅ Cho phép hạ tracing sampling probability qua env var (production-readiness)
 
-1. **(tuỳ chọn) Hạ `sampling.probability` xuống thấp hơn 1.0** trước khi coi là "production-ready" — 100% sampling chỉ hợp lý cho demo/dev.
+Trước đó `management.tracing.sampling.probability: 1.0` bị hardcode ở cả 16 service (15 business +
+`api-gateway`) — hợp lý cho demo (thấy mọi trace) nhưng không nên dùng nguyên vậy cho production
+(overhead + Zipkin phình to). Đổi thành `probability: ${TRACING_SAMPLING_PROBABILITY:1.0}` ở cả 16
+file — mặc định vẫn 100% (không đổi hành vi demo/dev hiện tại), nhưng giờ production deploy có thể hạ
+xuống chỉ bằng 1 biến môi trường, không cần rebuild image hay đổi code.
+
+**Đã verify bằng dữ liệu Zipkin thật — không chỉ "container khởi động được"**, và phát hiện 1 điều quan
+trọng về cách sampling hoạt động trong tracing phân tán (không phải bug, là hành vi đúng cần hiểu rõ):
+
+1. Baseline: gọi `post-service` qua gateway (mặc định 1.0) → trace xuất hiện đúng trong Zipkin.
+2. **Test đầu tiên qua gateway bị nhiễu**: tạm set `TRACING_SAMPLING_PROBABILITY=0.0` riêng cho
+   `post-service`, gọi 10 request **qua gateway** → vẫn thấy span mới (724→754)! Không phải bug —
+   đây là **head-based sampling**: quyết định "có sample hay không" được chốt ở nơi trace *bắt đầu*
+   (ở đây là `api-gateway`, vẫn 1.0) rồi truyền xuống qua trace context; service phía sau chỉ *kế thừa*
+   quyết định đó chứ không tự quyết lại — đúng theo cách Brave/Micrometer Tracing hoạt động, và đúng ra
+   phải vậy (nếu mỗi service tự quyết riêng thì 1 trace có thể bị đứt quãng, thiếu span giữa chừng).
+3. **Test đúng cách**: gọi thẳng `post-service` ở port 8084 (bỏ qua gateway → post-service tự là gốc
+   trace) với `probability=0.0` → gọi 10 request, **0 span mới** (754→754) — xác nhận biến môi trường
+   thật sự có tác dụng khi service là nơi khởi tạo trace.
+4. Gỡ override, redeploy lại `post-service` với mặc định → gọi trực tiếp lại → **5 request → 5 span
+   mới** (759→764) — tracing hoạt động lại bình thường, xác nhận revert sạch, không để lại cấu hình
+   tạm trong `docker-compose.yml` (`git diff` sạch sau khi xong).
+
+Build+test toàn reactor trước khi redeploy: **18/18 module pass** (chỉ đổi giá trị cấu hình, không sửa
+logic nghiệp vụ nên số test không đổi).
+
+Cách dùng khi deploy production: set `TRACING_SAMPLING_PROBABILITY=0.1` (hoặc giá trị mong muốn) trong
+`x-app-env` của `docker-compose.yml`, hoặc riêng từng service nếu muốn mức sampling khác nhau —
+không cần rebuild image.
+
+## Việc cần làm tiếp theo
+
+**Không còn mục nào trong backlog đề xuất trước đó** — cả 2 mục tuỳ chọn còn lại (gộp Swagger UI, hạ
+sampling probability) đã hoàn thành. Việc tiếp theo (nếu có) nên xuất phát từ yêu cầu mới của người
+dùng hoặc từ cột "Còn thiếu" ở bảng trạng thái từng service phía trên.
 
 ## ✅ Đã test WebSocket thật (chat + notification)
 
