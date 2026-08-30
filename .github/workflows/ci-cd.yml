@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build & test (18 modules, 279 unit tests)
+    name: Build & test (18 modules, 334 unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
       # see maven-surefire-plugin config in services/group-service/pom.xml —
       # it's run explicitly in the next step instead, on a runner that can
       # actually reach Docker).
-      - name: mvn clean install (build + 279 unit tests)
+      - name: mvn clean install (build + 334 unit tests)
         run: mvn -B clean install
 
       # GitHub-hosted ubuntu runners have a real Docker daemon, unlike the
@@ -94,7 +94,25 @@ jobs:
             services/post-service services/comment-service services/reaction-service \
             services/story-service services/reels-service services/group-service \
             services/fanpage-service services/dating-service services/chat-service \
-            services/notification-service services/feed-service"
+            services/notification-service services/feed-service services/moderation-service"
+
+          # GHCR occasionally answers a push with "unknown blob" when a layer
+          # shared with an already-pushed image (e.g. the common JRE base) is
+          # cross-repo blob-mounted before the registry has fully committed it
+          # — a known transient GHCR race, not a bad image. Retry a few times
+          # with backoff instead of failing the whole job on it.
+          push_with_retry() {
+            local ref="$1"
+            for attempt in 1 2 3; do
+              if docker push "$ref"; then
+                return 0
+              fi
+              echo "docker push $ref failed (attempt $attempt/3), retrying in 10s..."
+              sleep 10
+            done
+            echo "docker push $ref failed after 3 attempts"
+            return 1
+          }
 
           for svc in $SERVICES; do
             name=$(basename "$svc")
@@ -104,7 +122,7 @@ jobs:
             echo "::endgroup::"
 
             if [ "$SHOULD_PUSH" = "true" ]; then
-              docker push "${image}:latest"
-              docker push "${image}:${SHA_TAG}"
+              push_with_retry "${image}:latest"
+              push_with_retry "${image}:${SHA_TAG}"
             fi
           done

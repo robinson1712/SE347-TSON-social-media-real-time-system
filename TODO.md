@@ -155,6 +155,18 @@ Repo đã có remote GitHub thật (`robinson1712/SE347-TSON-social-media-real-t
 - `build-and-test`: `mvn clean install` xanh + **`GroupRepositoryIntegrationTest` (Testcontainers) pass thật** trong 20s trên runner có Docker không giới hạn — xác nhận đúng dự đoán, không phải lỗi code.
 - `docker-images`: build + push cả 17 image lên GHCR thành công, dùng `GITHUB_TOKEN` có sẵn không cần secret riêng.
 
+**Lỗi phát hiện ở run #5 (sau khi thêm moderation-service + mở rộng sang reels/story/group/fanpage),
+đã sửa**: job `docker-images` fail ở bước push — log cho thấy `feed-service` (service cuối trong danh
+sách) bị lỗi `unknown blob` ngay sau dòng `Mounted from ...notification-service` (Docker cố cross-repo
+blob-mount 1 layer base dùng chung giữa 2 image GHCR, registry chưa kịp commit blob ở image trước).
+Đây là race condition đã biết của GHCR khi push nhiều image chia sẻ layer gốc liên tiếp trong cùng 1
+job — không phải lỗi code/Dockerfile (đã xác nhận: build lại cả 17 image y hệt bước CI ngay trên máy
+local, tất cả build thành công, không lỗi). Fix: bọc mỗi lệnh `docker push` trong hàm `push_with_retry`
+(retry tối đa 3 lần, nghỉ 10s giữa các lần). Tiện thể phát hiện và sửa luôn 1 gap riêng: `moderation-service`
+(thêm từ 2 commit trước) chưa từng có trong danh sách `SERVICES` của CI — chưa từng được build/push.
+Cũng cập nhật job name/step name từ "279 unit tests" (số cũ, đã lỗi thời) lên đúng **334 unit tests**
+hiện tại.
+
 ## ✅ Content moderation
 
 Ba lớp bổ sung nhau, không thay thế nhau:
