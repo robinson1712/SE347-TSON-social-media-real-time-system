@@ -531,3 +531,133 @@ phát từ yêu cầu mới của người dùng.
 ## ✅ Đã test WebSocket thật (chat + notification)
 
 Xem "Lỗi thứ 8" ở trên — cả 2 luồng real-time đã verify PASS qua gateway thật với JWT thật, không phải qua mock.
+
+## ✅ Giai đoạn 2a — Flutter Web Frontend (nền tảng + trải nghiệm Facebook cốt lõi)
+
+Bắt đầu giai đoạn 2 (giao diện) theo yêu cầu: Flutter, bố cục dọc kiểu Facebook (để đồng bộ mobile sau
+này), gắn thẳng vào backend thật (không mock). Thư mục mới: `frontend/` (ngang hàng `services/`).
+
+**Đã triển khai (Phase 2a):**
+- **Kiến trúc**: `flutter_riverpod` (state), `go_router` (URL routing + auth guard qua `redirect`),
+  `dio` (HTTP client, có interceptor tự gắn `Authorization` header + tự refresh token khi gặp 401 rồi
+  retry 1 lần), `flutter_secure_storage` (lưu token). Model viết tay (`fromJson`/`toJson` thủ công,
+  không dùng `freezed`/`json_serializable`/`build_runner`) — quyết định vì máy dev không có Flutter SDK
+  cài sẵn nên không thể debug lỗi codegen tương tác được.
+- **Layout**: `AppShell` dùng chung — top bar (logo, tìm kiếm tổng hợp qua `search-service`, chuông lời
+  mời kết bạn, menu tài khoản), sidebar trái (điều hướng, các mục Group/Fanpage/Story/Reels/Dating/
+  Chat/Notification hiện "Sắp có" — giữ đúng bố cục Facebook thật dù chưa làm), cột giữa 1 cột dọc cho
+  nội dung (feed/profile/post detail), sidebar phải để placeholder. Responsive: ẩn 2 sidebar khi màn
+  hẹp (<900px).
+- **Chức năng đầy đủ theo scope đã chốt**: đăng ký/đăng nhập/đăng xuất, feed cá nhân (`GET
+  /api/feed/me`, infinite scroll), tạo/sửa/xoá/ghim bài viết, upload media qua `media-service`, chọn
+  quyền riêng tư PUBLIC/FRIENDS/CUSTOM/PRIVATE (CUSTOM mở picker chọn bạn cụ thể), gắn thẻ bạn bè, share/
+  repost (kèm lời bình + đổi privacy), comment có reply, reaction 6 loại (like/love/haha/wow/sad/angry)
+  cho cả post và comment, xem/sửa profile + đổi avatar/cover, gửi/chấp nhận/từ chối lời mời kết bạn, huỷ
+  kết bạn, chặn/bỏ chặn, danh sách bạn bè, tìm kiếm tổng hợp ở top bar (user + post, group/page tạm ẩn
+  vì chưa có UI tương ứng).
+- **Đóng gói**: `frontend/Dockerfile` (multi-stage `cirruslabs/flutter:stable` build → `nginx:alpine`
+  serve, có `try_files` fallback cho SPA routing), thêm service `frontend` (port 3001) vào
+  `docker-compose.yml`.
+
+**Verify qua Docker thật** (máy dev không có Flutter SDK cài sẵn nên đây là cách verify chính, không
+chỉ đọc code):
+- `docker compose build frontend` ban đầu fail 2 lỗi biên dịch Dart thật (không phải lỗi hạ tầng):
+  1. Truyền thẳng tear-off `X.fromJson` (kiểu `T Function(Map<String, dynamic>)`) vào tham số kiểu `T
+     Function(dynamic)` của `ApiResponse.fromJson`/`PageResponse.fromJson` — dart2js từ chối vì kiểu
+     tham số không khớp tĩnh (dù có vẻ hợp lệ khi đọc code). Sửa bằng cách bọc qua hàm top-level tường
+     minh kiểu `dynamic` (ví dụ `Post _postFromJson(dynamic json) => Post.fromJson(json as
+     Map<String, dynamic>)`), áp dụng cho toàn bộ 6 repository (`post`, `comment`, `reaction`,
+     `profile`, `auth`, và các chỗ dùng `PageResponse` lồng bên trong).
+  2. 2 chỗ thiếu import khiến provider không resolve được (`profileRepositoryProvider` định nghĩa nhầm
+     ở `user_lookup_provider.dart` thay vì `profile_repository.dart`; `profile_page.dart` import nhầm
+     `post_repository.dart` thay vì `post_provider.dart` nơi `postRepositoryProvider` thực sự khai
+     báo) — dọn lại co-location provider/repository cho đúng.
+- Sau khi sửa: `flutter build web --release` thành công, container `sma-frontend` chạy, `http://
+  localhost:3001` trả về đúng trang (title "Social", `flutter_bootstrap.js`/`main.dart.js` load 200).
+- Test cuốn chiếu qua `curl` thẳng vào `api-gateway` thật với đúng chuỗi request mà Flutter app gọi:
+  register → `/api/auth/me` → `/api/users/me` → tạo bài (đủ field `customAudienceUserIds`/
+  `taggedUserIds`/`sharedPostId`/`shareCount`) → feed (xác nhận đúng shape `PostDto` rút gọn của
+  feed-service, thiếu `customAudienceUserIds`/`updatedAt` — model Dart xử lý đúng bằng default) →
+  comment → reaction summary → share. Toàn bộ field JSON khớp chính xác với model Dart đã viết.
+- Gặp lại đúng lỗi hạ tầng Docker Desktop đã biết từ trước (`docker-desktop-data` rớt khỏi WSL, 500 "API
+  version") giữa lúc build — user Quit hẳn từ tray + mở lại, sau đó `feed-service` cần build lại jar
+  Maven thủ công (`mvn package -DskipTests`) vì lần chạy `mvn ... test` trước đó không đóng gói jar.
+
+**Chưa làm ở lượt này** (đã ghi rõ trong sidebar "Sắp có", chưa cần hỏi lại): Group, Fanpage, Story,
+Reels, Dating, Chat real-time UI, Notification real-time UI (mới có nút chuông cho lời mời kết bạn qua
+REST polling thủ công, chưa nối WebSocket), trang kết quả tìm kiếm riêng, trang quản trị Moderation.
+
+**Giới hạn đã biết của lượt verify này**: chưa test bằng trình duyệt thật (môi trường này không có công
+cụ điều khiển browser) — mới verify được (1) build production thành công, (2) trang tĩnh serve đúng,
+(3) toàn bộ contract API khớp field-by-field với backend thật qua curl. Chưa tận mắt xác nhận
+tương tác UI (click, dialog, responsive layout) hoạt động đúng trên trình duyệt.
+
+## ✅ Giai đoạn 2b — Flutter Web Frontend: Group, Fanpage, Story, Reels, Dating, Chat, Notification, Moderation, Search
+
+Hoàn thành toàn bộ phần backlog còn lại của giao diện (liệt kê "chưa làm" ở mục Phase 2a phía trên).
+Giờ giao diện phủ đủ chức năng của tất cả 16 business service.
+
+**Đã triển khai:**
+- **Group**: danh sách nhóm (`/groups`), trang chi tiết nhóm (`/groups/:id`) — tham gia/rời/duyệt thành
+  viên/đổi vai trò/kick, đăng bài trong nhóm (tái dùng `PostComposerDialog` với `groupId`).
+- **Fanpage**: danh sách trang (`/pages`), chi tiết trang (`/pages/:id`) — follow/unfollow, thêm/xoá
+  admin theo vai trò OWNER/ADMIN/EDITOR, đăng bài trong trang.
+- **Story**: dải story 24h ở đầu feed (`stories_strip.dart`), dialog tạo story, story viewer full-screen.
+- **Reels**: feed reels dạng cuộn dọc xếp hạng theo engagement (`/reels`), player video, tạo reel mới.
+- **Dating**: thiết lập hồ sơ hẹn hò, màn hình vuốt (swipe like/pass) hiển thị điểm tương thích, danh
+  sách match.
+- **Chat real-time**: danh sách hội thoại (`/chat`), màn hình chat (`/chat/:id`) — kết nối STOMP qua
+  WebSocket thật (`/ws`, gói `stomp_dart_client`, xác thực bằng `?token=` trên URL kết nối vì browser
+  WebSocket không tự gắn header `Authorization` được), gửi qua `/app/chat.send`, nhận qua
+  `/user/queue/messages` (echo cả tin nhắn của chính mình, đúng theo thiết kế backend).
+- **Notification real-time**: chuông thông báo ở top bar kết nối STOMP tới `/ws-notifications`, nhận
+  qua `/user/queue/notifications`, cộng dồn `unreadCount` ngay khi có sự kiện mới (không cần polling);
+  trang danh sách đầy đủ (`/notifications`) + đánh dấu đã đọc từng cái/tất cả.
+- **Moderation**: nút báo cáo nội dung (dialog chọn loại đối tượng + lý do), trang quản trị
+  (`/admin/reports`, chỉ hiện trong sidebar và cho phép truy cập khi tài khoản có role `ADMIN` — gate
+  cả ở `app_router.dart` lẫn ẩn nav item) để duyệt hàng đợi báo cáo, dismiss hoặc remove-content.
+- **Search page**: trang kết quả tìm kiếm đầy đủ (`/search?q=`) hiển thị cả 4 loại (user/group/page/
+  post), khác với dropdown ở top bar chỉ hiện gợi ý nhanh.
+- `AppShell` sidebar: toàn bộ mục trước đây "Sắp có" nay trỏ route thật; mục Moderation chỉ hiện với
+  admin.
+
+**Verify qua Docker thật**: `docker compose build frontend` lần đầu ra đúng 3 lỗi biên dịch Dart thật
+(1 chỗ thiếu `import '../../core/models/enums.dart';` ở `dating_provider.dart` khiến `SwipeAction`
+không resolve được dù type này được re-export gián tiếp qua `dating.dart`; 2 chỗ tương tự ở
+`notifications_page.dart`/`notification_bell_button.dart` khiến extension getter `.icon` trên
+`NotificationType` không nằm trong scope) — sửa xong build sạch. Sau đó test cuốn chiếu qua curl thẳng
+vào `api-gateway` thật: tạo group, tạo fanpage, tạo story, tạo reel, tạo/lưu hồ sơ dating, list chat
+conversations, notifications unread-count, tạo moderation report, tìm kiếm tổng hợp (trả về đúng cả
+group mới tạo) — toàn bộ field JSON khớp chính xác với model Dart.
+
+**Sự cố hạ tầng gặp phải khi build lượt này** (không phải lỗi code, ghi lại để lần sau khỏi mất thời
+gian chẩn đoán lại):
+- Docker Desktop crash lặp lại nhiều lần trong đêm (500 "API version", `docker-desktop-data` rớt khỏi
+  WSL) — cùng loại lỗi đã ghi nhận trước đó, khắc phục bằng Quit hẳn từ tray + mở lại nhiều lần.
+- Người dùng thử chuyển vị trí lưu dữ liệu Docker (disk image location) từ ổ C sang ổ D qua Settings —
+  **phát hiện bug thật của Docker Desktop**: robocopy copy dữ liệu (~46GB) sang D thành công (verify
+  bằng cách so kích thước file 2 bên khớp tuyệt đối), nhưng Docker Desktop hiểu sai exit code 1 của
+  robocopy (nghĩa là "copy thành công" theo tài liệu Microsoft) thành lỗi, nên huỷ áp dụng setting —
+  lặp lại y hệt ở lần thử lại. Không có file cấu hình host-side để tự sửa tay (giá trị này lưu trong
+  filesystem ext4 của VM WSL, không phải JSON trên Windows) nên đành bỏ qua, xoá bản D thừa, giữ dữ
+  liệu ở C (còn 33GB trống, đủ dùng).
+  - Thử `wsl --import-in-place` để đăng ký lại `docker-desktop-data` — thất bại với
+    `WSL_E_NOT_A_LINUX_DISTRO`, vì bản Docker Desktop này không dùng distro dữ liệu riêng nữa (chỉ có
+    1 distro `docker-desktop`, vhdx được mount như đĩa phụ) — việc `docker-desktop-data` không xuất
+    hiện trong `wsl --list` là **bình thường** ở bản này, không phải dấu hiệu hỏng như đã tưởng nhầm
+    trước đó trong phiên.
+- **Nguyên nhân sâu xa của hàng loạt lần build frontend bị crash giữa chừng** (`rpc error: code =
+  Unavailable`, `http2: ... file has already been closed`, cả ở BuildKit lẫn legacy builder — loại trừ
+  được nguyên nhân do BuildKit): RAM cấp cho WSL2 không đủ khi vừa chạy 24+ container backend vừa chạy
+  `dart2js` (rất tốn RAM lúc biên dịch bản `--release`). Máy host chỉ 16GB RAM, WSL2 dùng mặc định
+  (không có `.wslconfig`) nên bị giới hạn thấp. Khắc phục: tạo `%USERPROFILE%\.wslconfig` với
+  `memory=12GB` + `wsl --shutdown` + mở lại Docker Desktop, đồng thời tạm tắt observability stack
+  (Grafana/Prometheus/Loki/Promtail/Zipkin — không cần thiết lúc build) để tăng vùng đệm. Sau đó build
+  chạy trọn vẹn dù chậm hơn (267s thay vì ~90s bình thường, do RAM vẫn eo hẹp chứ không thiếu hẳn nữa).
+
+**Giới hạn đã biết**: vẫn chưa test bằng trình duyệt thật (không có công cụ điều khiển browser trong
+môi trường này) — WebSocket chat/notification đã verify đúng theo tài liệu contract backend (đọc kỹ
+source `ChatStompController`/`WebSocketConfig` của cả 2 service) nhưng **chưa test round-trip thật qua
+STOMP** (chỉ test được REST endpoints qua curl, không test được phần gửi/nhận qua `/app/chat.send` và
+`/user/queue/messages` bằng công cụ dòng lệnh sẵn có). Nên tự tay thử gửi tin nhắn giữa 2 tài khoản
+trên trình duyệt thật để xác nhận trước khi coi Chat/Notification real-time là hoàn tất 100%.

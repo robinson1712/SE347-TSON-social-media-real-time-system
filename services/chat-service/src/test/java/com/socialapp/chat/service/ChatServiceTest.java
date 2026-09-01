@@ -224,6 +224,16 @@ class ChatServiceTest {
     }
 
     @Test
+    void onlineStatuses_mixedPresence_returnsPerUserMap() {
+        when(redisTemplate.hasKey("presence:alice")).thenReturn(true);
+        when(redisTemplate.hasKey("presence:bob")).thenReturn(false);
+
+        var result = chatService.onlineStatuses(List.of("alice", "bob"));
+
+        assertThat(result).containsEntry("alice", true).containsEntry("bob", false);
+    }
+
+    @Test
     void ensurePrivateConversation_noExistingConversation_createsOne() {
         when(conversationRepository.findPrivateConversation("alice", "bob")).thenReturn(Optional.empty());
 

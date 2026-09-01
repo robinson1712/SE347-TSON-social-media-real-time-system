@@ -49,6 +49,9 @@ public class UserProfileService {
         if (request.location() != null) {
             profile.setLocation(request.location());
         }
+        if (request.readReceiptsEnabled() != null) {
+            profile.setReadReceiptsEnabled(request.readReceiptsEnabled());
+        }
         profile.setUpdatedAt(Instant.now());
         return UserProfileResponse.from(userProfileRepository.save(profile));
     }

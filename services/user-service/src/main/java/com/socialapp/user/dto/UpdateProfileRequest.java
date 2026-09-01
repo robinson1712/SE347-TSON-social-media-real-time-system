@@ -9,6 +9,7 @@ public record UpdateProfileRequest(
         String bio,
         LocalDate dob,
         Gender gender,
-        String location
+        String location,
+        Boolean readReceiptsEnabled
 ) {
 }

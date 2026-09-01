@@ -32,6 +32,8 @@ Client (Web/Mobile)
         ├── moderation-service (8095)    Postgres: moderation_db — user report + admin review queue
         └── search-service (8096)        Không có DB riêng — tổng hợp qua Feign (user/group/fanpage/post)
 
+  frontend (3001) — Flutter Web (nginx serve), bố cục dọc kiểu Facebook, gọi thẳng API Gateway
+
   Config Server (8888) — cấp config tập trung (native, đọc từ ./config-repo)
   Kafka — giao tiếp bất đồng bộ giữa các service (post/comment/reaction/group/page/match/message events)
 
@@ -67,6 +69,10 @@ docker compose up -d --build
 
 Chờ khoảng 1-2 phút để Postgres/Mongo/Kafka/MinIO/Eureka khởi động xong trước khi các service
 đăng ký thành công vào Eureka. Kiểm tra: http://localhost:8761 (Eureka dashboard).
+
+Lệnh trên cũng build và chạy `frontend` (Flutter Web) cùng lúc — mở http://localhost:3001 sau khi
+backend đã sẵn sàng (`api-gateway` cần đăng ký xong ở Eureka trước, nếu không các request đầu tiên từ
+giao diện sẽ gặp `503 Service Unavailable`).
 
 ### 3. Test nhanh luồng end-to-end
 
@@ -148,6 +154,13 @@ rồi chạy service bằng `mvn spring-boot:run` trong từng thư mục `servi
 - **Tìm kiếm tổng hợp** (`search-service`, port 8096): `GET /api/search?q=&limit=` gộp kết quả từ
   user/group/fanpage/post-service qua Feign (mỗi client có circuit breaker + fallback rỗng riêng —
   1 service down không sập cả search). Không có database riêng.
+- **Frontend Flutter Web** (`frontend/`, port 3001): giao diện bố cục dọc kiểu Facebook, gắn thẳng vào
+  các API thật ở trên — đăng nhập, feed, đăng bài (kèm share/tag/custom-audience privacy), comment/
+  reply, reaction, profile + kết bạn, tìm kiếm tổng hợp (kèm trang kết quả riêng), Group, Fanpage,
+  Story, Reels, Dating, Chat real-time (STOMP/WebSocket), Notification real-time (STOMP/WebSocket),
+  trang quản trị Moderation (gate theo role `ADMIN`). Đã phủ đủ chức năng của toàn bộ 16 business
+  service. Chi tiết đầy đủ + giới hạn đã biết (chưa test bằng trình duyệt thật, chưa test round-trip
+  WebSocket thật): xem mục "Giai đoạn 2a"/"Giai đoạn 2b" trong `TODO.md`.
 
 ## Giới hạn còn lại
 

@@ -44,6 +44,11 @@ public class UserProfile {
 
     private String location;
 
+    /** Facebook-style reciprocal read receipts: off for me also hides the other person's "seen" status from me. */
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean readReceiptsEnabled = true;
+
     @Column(nullable = false)
     private Instant createdAt;
 

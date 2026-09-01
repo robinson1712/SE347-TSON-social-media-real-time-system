@@ -18,8 +18,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -94,6 +96,14 @@ public class ChatService {
 
     public boolean isOnline(String userId) {
         return Boolean.TRUE.equals(redisTemplate.hasKey("presence:" + userId));
+    }
+
+    public Map<String, Boolean> onlineStatuses(List<String> userIds) {
+        Map<String, Boolean> result = new LinkedHashMap<>();
+        for (String userId : userIds) {
+            result.put(userId, isOnline(userId));
+        }
+        return result;
     }
 
     public Conversation getConversationOrThrow(String id) {

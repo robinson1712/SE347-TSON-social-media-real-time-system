@@ -1,6 +1,7 @@
 package com.socialapp.notification.event;
 
 import com.socialapp.common.event.CommentCreatedEvent;
+import com.socialapp.common.event.FollowEvent;
 import com.socialapp.common.event.FriendRequestEvent;
 import com.socialapp.common.event.GroupEvent;
 import com.socialapp.common.event.KafkaTopics;
@@ -90,5 +91,12 @@ public class NotificationEventListener {
         }
         notificationService.createAndPush(event.taggedUserId(), event.authorId(), NotificationType.TAG,
                 "POST", event.postId(), "Someone tagged you in a post");
+    }
+
+    /** Only published on an explicit follow — see FollowService — so there's no unfollow counterpart to filter out here. */
+    @KafkaListener(topics = KafkaTopics.FOLLOW, groupId = "${spring.kafka.consumer.group-id}")
+    public void onFollow(FollowEvent event) {
+        notificationService.createAndPush(event.followeeId(), event.followerId(), NotificationType.FOLLOW,
+                "USER", event.followerId(), "Someone started following you");
     }
 }

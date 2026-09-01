@@ -9,6 +9,13 @@ x-app-env: &app-env
   JWT_SECRET: change-this-social-app-jwt-secret-key-must-be-at-least-256-bits
   ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
   ADMIN_EMAILS: admin@social.app
+  # The Flutter web client legitimately fires bursts of concurrent requests on
+  # a single page (per-post/comment author lookups, feed, notifications, chat
+  # conversations, presence/follow-status checks all firing together) that
+  # comfortably exceed the original 20/40 default sized for lighter traffic —
+  # raised to give normal page loads headroom instead of 429ing routine usage.
+  RATE_LIMIT_REPLENISH: 50
+  RATE_LIMIT_BURST: 100
 
 services:
   # ---------- Infrastructure ----------
@@ -386,6 +393,18 @@ services:
       - "8096:8096"
     depends_on:
       - eureka-server
+
+  # ---------- Frontend ----------
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_BASE_URL: http://localhost:8080
+    container_name: sma-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - api-gateway
 
 volumes:
   pg_data:

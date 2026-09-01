@@ -48,6 +48,8 @@ public class ChatStompController {
                 .senderId(senderId)
                 .content(request.content())
                 .mediaUrl(request.mediaUrl())
+                .storyReplyId(request.storyReplyId())
+                .storyReplyPreviewUrl(request.storyReplyPreviewUrl())
                 .sentAt(Instant.now())
                 .build();
         Message saved = messageRepository.save(message);

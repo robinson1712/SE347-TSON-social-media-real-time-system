@@ -1,6 +1,7 @@
 package com.socialapp.notification.event;
 
 import com.socialapp.common.event.CommentCreatedEvent;
+import com.socialapp.common.event.FollowEvent;
 import com.socialapp.common.event.FriendRequestEvent;
 import com.socialapp.common.event.GroupEvent;
 import com.socialapp.common.event.MatchEvent;
@@ -272,5 +273,23 @@ class NotificationEventListenerTest {
         listener.onPostTagged(event);
 
         verify(notificationRepository, never()).save(any());
+    }
+
+    // ---- FollowEvent ----
+
+    @Test
+    void onFollow_notifiesFollowee() {
+        stubSaveEcho();
+        FollowEvent event = new FollowEvent("alice", "bob", Instant.now());
+
+        listener.onFollow(event);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertThat(captor.getValue().getRecipientId()).isEqualTo("bob");
+        assertThat(captor.getValue().getActorId()).isEqualTo("alice");
+        assertThat(captor.getValue().getType()).isEqualTo(NotificationType.FOLLOW);
+        assertThat(captor.getValue().getTargetType()).isEqualTo("USER");
+        assertThat(captor.getValue().getTargetId()).isEqualTo("alice");
     }
 }
