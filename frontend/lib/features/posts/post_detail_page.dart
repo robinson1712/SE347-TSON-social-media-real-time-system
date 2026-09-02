@@ -31,6 +31,7 @@ class PostDetailPage extends ConsumerWidget {
                 post: post,
                 initiallyShowComments: true,
                 openDetailOnTap: false,
+                onUpdated: () => ref.invalidate(_postDetailProvider(postId)),
                 onDeleted: () {
                   // The post this whole page is about no longer exists —
                   // nothing left to render here, so back out rather than

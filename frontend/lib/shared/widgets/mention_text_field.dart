@@ -4,13 +4,21 @@ import '../../core/models/user_profile.dart';
 import 'avatar.dart';
 
 /// A [TextField] with Facebook-style `@name` autocomplete: typing `@`
-/// followed by letters opens a dropdown of matching [candidates] (friends),
-/// picking one inserts their name as text and records their id into
-/// [mentionedUserIds] — the caller merges that set into `taggedUserIds` on
-/// submit. Purely a client-side text/id association: the backend has no
-/// concept of parsing `@mentions` out of free-text content, so this widget
-/// is what turns typed mentions into the same `taggedUserIds` field the
-/// existing tag-picker chips write to.
+/// followed by letters shows a dropdown of matching [candidates] (friends)
+/// directly below the field, picking one inserts their name as text and
+/// records their id into [mentionedUserIds] — the caller merges that set
+/// into `taggedUserIds` on submit. Purely a client-side text/id
+/// association: the backend has no concept of parsing `@mentions` out of
+/// free-text content, so this widget is what turns typed mentions into the
+/// same `taggedUserIds` field the existing tag-picker chips write to.
+///
+/// Renders the suggestion list inline (pushing following content down)
+/// rather than as a floating overlay — this widget is typically used inside
+/// a [Dialog], and a raw `OverlayEntry` positioned via
+/// `CompositedTransformFollower` turned out unreliable there (taps on a
+/// suggestion silently did nothing), so inline is the reliable choice: it's
+/// a normal part of the widget tree with no cross-overlay z-order or
+/// focus-loss timing to get wrong.
 class MentionTextField extends StatefulWidget {
   final TextEditingController controller;
   final List<UserProfile> candidates;
@@ -38,10 +46,10 @@ class MentionTextField extends StatefulWidget {
 }
 
 class _MentionTextFieldState extends State<MentionTextField> {
-  final _layerLink = LayerLink();
   FocusNode? _ownedFocusNode;
-  OverlayEntry? _entry;
   int? _atIndex;
+  int? _queryEnd;
+  List<UserProfile> _matches = const [];
 
   FocusNode get _focusNode => widget.focusNode ?? (_ownedFocusNode ??= FocusNode());
 
@@ -54,7 +62,6 @@ class _MentionTextFieldState extends State<MentionTextField> {
   @override
   void dispose() {
     widget.controller.removeListener(_onTextChanged);
-    _removeOverlay();
     _ownedFocusNode?.dispose();
     super.dispose();
   }
@@ -63,7 +70,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
     final text = widget.controller.text;
     final cursor = widget.controller.selection.baseOffset;
     if (cursor < 0 || cursor > text.length) {
-      _removeOverlay();
+      if (_matches.isNotEmpty) setState(() => _matches = const []);
       return;
     }
 
@@ -74,28 +81,28 @@ class _MentionTextFieldState extends State<MentionTextField> {
     }
     final hasAt = start > 0 && text[start - 1] == '@';
     if (!hasAt) {
-      _removeOverlay();
+      if (_matches.isNotEmpty) setState(() => _matches = const []);
       return;
     }
-    _atIndex = start - 1;
     final query = text.substring(start, cursor).toLowerCase();
     final matches = widget.candidates
         .where((c) => c.fullName.toLowerCase().contains(query))
         .take(6)
         .toList();
 
-    if (matches.isEmpty) {
-      _removeOverlay();
-    } else {
-      _showOverlay(matches);
-    }
+    setState(() {
+      _atIndex = start - 1;
+      _queryEnd = cursor;
+      _matches = matches;
+    });
   }
 
   void _pick(UserProfile user) {
     final text = widget.controller.text;
-    final cursor = widget.controller.selection.baseOffset;
-    if (_atIndex == null || cursor < 0) return;
-    final before = text.substring(0, _atIndex!);
+    final atIndex = _atIndex;
+    final cursor = _queryEnd;
+    if (atIndex == null || cursor == null || cursor > text.length) return;
+    final before = text.substring(0, atIndex);
     final after = text.substring(cursor);
     final inserted = '@${user.fullName} ';
     final newText = '$before$inserted$after';
@@ -104,61 +111,46 @@ class _MentionTextFieldState extends State<MentionTextField> {
       selection: TextSelection.collapsed(offset: before.length + inserted.length),
     );
     widget.mentionedUserIds.add(user.id);
-    _removeOverlay();
-  }
-
-  void _removeOverlay() {
-    _entry?.remove();
-    _entry = null;
-    _atIndex = null;
-  }
-
-  void _showOverlay(List<UserProfile> matches) {
-    _removeOverlay();
-    _entry = OverlayEntry(
-      builder: (context) => Positioned(
-        width: 260,
-        child: CompositedTransformFollower(
-          link: _layerLink,
-          showWhenUnlinked: false,
-          offset: const Offset(0, 4),
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 240),
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                children: matches
-                    .map((u) => ListTile(
-                          dense: true,
-                          leading: Avatar(url: u.avatarUrl, name: u.fullName, radius: 14),
-                          title: Text(u.fullName),
-                          onTap: () => _pick(u),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_entry!);
+    setState(() => _matches = const []);
   }
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        decoration: widget.decoration,
-        maxLines: widget.maxLines,
-        minLines: widget.minLines,
-        onSubmitted: widget.onSubmitted,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: widget.controller,
+          focusNode: _focusNode,
+          decoration: widget.decoration,
+          maxLines: widget.maxLines,
+          minLines: widget.minLines,
+          onSubmitted: widget.onSubmitted,
+        ),
+        if (_matches.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            constraints: const BoxConstraints(maxHeight: 200),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              children: _matches
+                  .map((u) => ListTile(
+                        dense: true,
+                        leading: Avatar(
+                            url: u.avatarUrl, name: u.fullName, radius: 14, gender: u.gender),
+                        title: Text(u.fullName),
+                        onTap: () => _pick(u),
+                      ))
+                  .toList(),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/models/enums.dart';
 import '../../core/models/friendship.dart';
 import '../../core/models/page_response.dart';
 import '../../core/models/post.dart';
+import '../../core/models/story.dart';
+import '../../core/models/user_profile.dart';
 import '../../shared/widgets/avatar.dart';
 import '../../shared/widgets/post_card.dart';
 import '../auth/auth_provider.dart';
+import '../auth/current_user_widgets.dart';
 import '../chat/chat_provider.dart';
+import '../posts/post_composer_dialog.dart';
 import '../posts/post_provider.dart';
+import '../stories/story_repository.dart';
+import '../stories/story_viewer.dart';
 import 'edit_profile_page.dart';
 import 'profile_provider.dart';
+import 'user_lookup_provider.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   final String userId;
@@ -32,73 +40,475 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Trang cá nhân')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
-          child: profileAsync.when(
-            data: (profile) => ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        if (profile.coverUrl != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(profile.coverUrl!,
-                                height: 160, width: double.infinity, fit: BoxFit.cover),
+      body: profileAsync.when(
+        data: (profile) => Center(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Facebook-clone profile is deliberately wider than the
+              // single-column feed — 2.5/3.5 of whatever width the shell's
+              // center column gives this page.
+              final contentWidth = constraints.maxWidth * (2.5 / 3.5);
+              return SizedBox(
+                width: contentWidth,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _CoverHeader(
+                        profile: profile,
+                        userId: widget.userId,
+                        isMe: isMe,
+                        myId: myId,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: _LeftColumn(profile: profile, userId: widget.userId),
                           ),
-                        const SizedBox(height: 12),
-                        Avatar(url: profile.avatarUrl, name: profile.fullName, radius: 44),
-                        const SizedBox(height: 8),
-                        Text(profile.fullName,
-                            style: Theme.of(context).textTheme.headlineSmall),
-                        if (profile.bio != null && profile.bio!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(profile.bio!),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 3,
+                            child: _RightColumn(
+                                profile: profile, userId: widget.userId, isMe: isMe),
                           ),
-                        if (profile.location != null && profile.location!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text('📍 ${profile.location}',
-                                style: TextStyle(color: Colors.grey.shade600)),
-                          ),
-                        const SizedBox(height: 8),
-                        _FollowCounts(targetId: widget.userId),
-                        const SizedBox(height: 12),
-                        if (isMe)
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Chỉnh sửa trang cá nhân'),
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => EditProfilePage(profile: profile)),
-                            ),
-                          )
-                        else
-                          _FriendshipActionsRow(
-                            myId: myId,
-                            targetId: widget.userId,
-                          ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text('Bài viết', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                _UserPosts(userId: widget.userId),
+              );
+            },
+          ),
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Không tải được trang cá nhân: $e'),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cover photo + overlapping avatar + name/counts/bio + action row, all
+/// Facebook-style — the header band that sits above the two-column layout.
+class _CoverHeader extends StatelessWidget {
+  final UserProfile profile;
+  final String userId;
+  final bool isMe;
+  final String? myId;
+
+  const _CoverHeader({
+    required this.profile,
+    required this.userId,
+    required this.isMe,
+    required this.myId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              profile.coverUrl != null
+                  ? Image.network(profile.coverUrl!,
+                      height: 300, width: double.infinity, fit: BoxFit.cover)
+                  : Container(height: 220, color: Colors.grey.shade300),
+              Positioned(
+                left: 24,
+                bottom: -48,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: Avatar(
+                      url: profile.avatarUrl,
+                      name: profile.fullName,
+                      radius: 60,
+                      gender: profile.gender),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 56, 24, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(profile.fullName, style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 4),
+                      _FollowCounts(targetId: userId),
+                      if (profile.bio != null && profile.bio!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(profile.bio!),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                if (isMe)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Chỉnh sửa trang cá nhân'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => EditProfilePage(profile: profile)),
+                    ),
+                  )
+                else
+                  _FriendshipActionsRow(myId: myId, targetId: userId),
               ],
             ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Không tải được trang cá nhân: $e'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Left 2/5 column: Giới thiệu / Tin nổi bật / Bạn bè / Ảnh — the info-card
+/// stack Facebook shows to the left of a profile's posts.
+class _LeftColumn extends StatelessWidget {
+  final UserProfile profile;
+  final String userId;
+
+  const _LeftColumn({required this.profile, required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InfoCard(profile: profile),
+        const SizedBox(height: 12),
+        _HighlightsCard(userId: userId),
+        const SizedBox(height: 12),
+        _FriendsPreviewCard(userId: userId),
+        const SizedBox(height: 12),
+        _PhotosPreviewCard(userId: userId),
+      ],
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final Widget? trailing;
+  final Widget child;
+
+  const _SectionCard({required this.title, this.trailing, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                    child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+                if (trailing != null) trailing!,
+              ],
+            ),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Giới thiệu" — the static facts a profile has: bio, location, birthday.
+class _InfoCard extends StatelessWidget {
+  final UserProfile profile;
+
+  const _InfoCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    if (profile.location != null && profile.location!.isNotEmpty) {
+      rows.add(_InfoRow(icon: Icons.home_outlined, text: 'Sống ở ${profile.location}'));
+    }
+    if (profile.dob != null) {
+      rows.add(_InfoRow(
+          icon: Icons.cake_outlined,
+          text: 'Sinh ngày ${DateFormat('dd/MM/yyyy').format(profile.dob!)}'));
+    }
+    if (profile.createdAt != null) {
+      rows.add(_InfoRow(
+          icon: Icons.schedule,
+          text: 'Tham gia TSON từ ${DateFormat('MM/yyyy').format(profile.createdAt!)}'));
+    }
+
+    return _SectionCard(
+      title: 'Giới thiệu',
+      child: rows.isEmpty
+          ? Text('Chưa có thông tin', style: TextStyle(color: Colors.grey.shade600))
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _InfoRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey.shade600),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Tin nổi bật" — this profile's currently-active (not-yet-expired)
+/// stories, tap to open the same story viewer used on the feed strip.
+class _HighlightsCard extends ConsumerWidget {
+  final String userId;
+
+  const _HighlightsCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final storiesAsync = ref.watch(_userStoriesProvider(userId));
+    final stories = storiesAsync.value ?? const [];
+    if (storiesAsync.isLoading && stories.isEmpty) {
+      return const _SectionCard(
+        title: 'Tin nổi bật',
+        child: Center(
+            child: SizedBox(
+                height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+    if (stories.isEmpty) return const SizedBox.shrink();
+
+    return _SectionCard(
+      title: 'Tin nổi bật',
+      child: SizedBox(
+        height: 96,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: stories.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, i) => GestureDetector(
+            onTap: () => showStoryViewer(context, stories, i),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: stories[i].mediaType == StoryMediaType.image
+                  ? Image.network(stories[i].mediaUrl, width: 64, height: 96, fit: BoxFit.cover)
+                  : Container(
+                      width: 64,
+                      height: 96,
+                      color: Colors.black87,
+                      child: const Icon(Icons.play_circle_outline, color: Colors.white),
+                    ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+final _userStoriesProvider =
+    FutureProvider.family<List<Story>, String>((ref, userId) {
+  return ref.read(storyRepositoryProvider).byAuthor(userId);
+});
+
+/// "Bạn bè" — friend count + a small avatar preview grid.
+class _FriendsPreviewCard extends ConsumerWidget {
+  final String userId;
+
+  const _FriendsPreviewCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final idsAsync = ref.watch(friendIdsOfProvider(userId));
+    final ids = idsAsync.value ?? const [];
+
+    return _SectionCard(
+      title: 'Bạn bè',
+      trailing: TextButton(
+        onPressed: () => context.push('/friends'),
+        child: const Text('Xem tất cả'),
+      ),
+      child: ids.isEmpty
+          ? Text('Chưa có bạn bè', style: TextStyle(color: Colors.grey.shade600))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${ids.length} bạn bè', style: TextStyle(color: Colors.grey.shade600)),
+                const SizedBox(height: 8),
+                GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.85,
+                  children: ids
+                      .take(9)
+                      .map((id) => _FriendPreviewTile(userId: id))
+                      .toList(),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _FriendPreviewTile extends ConsumerWidget {
+  final String userId;
+
+  const _FriendPreviewTile({required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(userLookupProvider(userId)).value;
+    return GestureDetector(
+      onTap: () => context.push('/profile/$userId'),
+      child: Column(
+        children: [
+          Avatar(
+              url: profile?.avatarUrl,
+              name: profile?.fullName ?? '',
+              radius: 28,
+              gender: profile?.gender),
+          const SizedBox(height: 4),
+          Text(
+            profile?.fullName ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Ảnh" — a small preview grid of media pulled from this profile's own
+/// posts (no separate photos endpoint exists, so this reuses the same
+/// author-posts fetch the post list below already needs).
+class _PhotosPreviewCard extends ConsumerWidget {
+  final String userId;
+
+  const _PhotosPreviewCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final postsAsync = ref.watch(_userPostsProvider(userId));
+    final photos = (postsAsync.value?.content ?? const <Post>[])
+        .expand((p) => p.mediaUrls)
+        .take(9)
+        .toList();
+
+    if (photos.isEmpty) return const SizedBox.shrink();
+
+    return _SectionCard(
+      title: 'Ảnh',
+      child: GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        children: photos
+            .map((url) => ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.network(url, fit: BoxFit.cover),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+/// Right 3/5 column: composer (own profile only) + the post/share feed.
+class _RightColumn extends StatelessWidget {
+  final UserProfile profile;
+  final String userId;
+  final bool isMe;
+
+  const _RightColumn({required this.profile, required this.userId, required this.isMe});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (isMe) ...[
+          _ComposerBox(profile: profile, userId: userId),
+          const SizedBox(height: 12),
+        ],
+        Text('Bài viết', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        _UserPosts(userId: userId),
+      ],
+    );
+  }
+}
+
+class _ComposerBox extends ConsumerWidget {
+  final UserProfile profile;
+  final String userId;
+
+  const _ComposerBox({required this.profile, required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const CurrentUserAvatar(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => showPostComposerDialog(
+                  context,
+                  onPosted: () => ref.invalidate(_userPostsProvider(userId)),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F2F5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('Hãy viết gì đó cho ${profile.fullName.split(' ').last}...',
+                      style: TextStyle(color: Colors.grey.shade700)),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -155,6 +565,7 @@ class _FriendshipActionsRowState extends ConsumerState<_FriendshipActionsRow> {
     return statusAsync.when(
       data: (status) => Wrap(
         spacing: 8,
+        runSpacing: 8,
         children: [
           _buildFriendshipButton(status),
           _FollowButton(targetId: widget.targetId),
@@ -193,7 +604,7 @@ class _FriendshipActionsRowState extends ConsumerState<_FriendshipActionsRow> {
               : () async {
                   final confirmed = await _confirm(
                     'Huỷ kết bạn?',
-                    'Hai bạn sẽ không còn là bạn bè trên Social nữa.',
+                    'Hai bạn sẽ không còn là bạn bè trên TSON nữa.',
                   );
                   if (confirmed) {
                     await _run(() =>
@@ -336,6 +747,7 @@ class _UserPosts extends ConsumerWidget {
                     key: ValueKey(p.id),
                     post: p,
                     onDeleted: () => ref.invalidate(_userPostsProvider(userId)),
+                    onUpdated: () => ref.invalidate(_userPostsProvider(userId)),
                   ))
               .toList(),
         );

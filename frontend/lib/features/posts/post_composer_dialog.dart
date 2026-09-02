@@ -20,10 +20,12 @@ Future<void> showPostComposerDialog(
   Post? editing,
   String? groupId,
   String? pageId,
+  VoidCallback? onPosted,
 }) {
   return showDialog(
     context: context,
-    builder: (_) => PostComposerDialog(editing: editing, groupId: groupId, pageId: pageId),
+    builder: (_) => PostComposerDialog(
+        editing: editing, groupId: groupId, pageId: pageId, onPosted: onPosted),
   );
 }
 
@@ -31,8 +33,10 @@ class PostComposerDialog extends ConsumerStatefulWidget {
   final Post? editing;
   final String? groupId;
   final String? pageId;
+  final VoidCallback? onPosted;
 
-  const PostComposerDialog({super.key, this.editing, this.groupId, this.pageId});
+  const PostComposerDialog(
+      {super.key, this.editing, this.groupId, this.pageId, this.onPosted});
 
   @override
   ConsumerState<PostComposerDialog> createState() =>
@@ -144,6 +148,7 @@ class _PostComposerDialogState extends ConsumerState<PostComposerDialog> {
           await actions.create(request);
         }
       }
+      widget.onPosted?.call();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = e.toString());

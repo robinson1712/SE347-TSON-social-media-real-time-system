@@ -320,6 +320,10 @@ class _CommentAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(userLookupProvider(userId)).value;
-    return Avatar(url: profile?.avatarUrl, name: profile?.fullName ?? '', radius: 16);
+    return Avatar(
+        url: profile?.avatarUrl,
+        name: profile?.fullName ?? '',
+        radius: 16,
+        gender: profile?.gender);
   }
 }

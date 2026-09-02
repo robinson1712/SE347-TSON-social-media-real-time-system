@@ -4,6 +4,9 @@ import '../../core/api/api_exception.dart';
 import '../../core/api/dio_client.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/models/auth_models.dart';
+import '../../core/models/enums.dart';
+import '../chat/chat_provider.dart';
+import '../notifications/notification_provider.dart';
 import 'auth_repository.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
@@ -39,12 +42,25 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
+  final Ref _ref;
 
-  AuthNotifier(this._repository) : super(const AuthState()) {
+  AuthNotifier(this._repository, this._ref) : super(const AuthState()) {
     DioClient.onSessionExpired = () {
       state = const AuthState(status: AuthStatus.unauthenticated);
+      _resetSessionScopedProviders();
     };
     _bootstrap();
+  }
+
+  /// chatProvider/notificationProvider hold a live WebSocket connection plus
+  /// per-user cached state (messages, unread counts) for the whole app
+  /// lifetime — without this, switching accounts in the same browser tab
+  /// (logout then log in as someone else) leaves the previous user's
+  /// messages/connection alive, so "mine" vs "theirs" bubble alignment and
+  /// unread badges end up computed against the wrong identity.
+  void _resetSessionScopedProviders() {
+    _ref.invalidate(chatProvider);
+    _ref.invalidate(notificationProvider);
   }
 
   Future<void> _bootstrap() async {
@@ -75,6 +91,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final account = await _repository.me();
       state = AuthState(status: AuthStatus.authenticated, account: account);
+      _resetSessionScopedProviders();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
@@ -87,6 +104,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String password,
     String fullName, {
     String? phone,
+    Gender? gender,
+    DateTime? dob,
   }) async {
     state = state.copyWith(busy: true, clearError: true);
     try {
@@ -96,6 +115,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           password: password,
           fullName: fullName,
           phone: phone,
+          gender: gender,
+          dob: dob,
         ),
       );
       await TokenStorage.instance.saveSession(
@@ -105,6 +126,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final account = await _repository.me();
       state = AuthState(status: AuthStatus.authenticated, account: account);
+      _resetSessionScopedProviders();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
@@ -119,13 +141,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
     await TokenStorage.instance.clear();
     state = const AuthState(status: AuthStatus.unauthenticated);
+    _resetSessionScopedProviders();
   }
 }
 
 final authRepositoryProvider = Provider((ref) => AuthRepository());
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(ref.watch(authRepositoryProvider)),
+  (ref) => AuthNotifier(ref.watch(authRepositoryProvider), ref),
 );
 
 /// The current user's account id, used throughout the app to tell

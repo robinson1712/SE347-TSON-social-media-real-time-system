@@ -14,6 +14,7 @@ import '../../features/posts/post_provider.dart';
 import '../../features/posts/share_dialog.dart';
 import '../../features/reactions/reaction_picker.dart';
 import '../../features/reactions/reaction_provider.dart';
+import 'post_content_text.dart';
 import 'privacy_badge.dart';
 import 'user_inline.dart';
 
@@ -33,12 +34,19 @@ class PostCard extends ConsumerStatefulWidget {
   /// refreshes/removes from whatever list this card came from.
   final VoidCallback? onDeleted;
 
+  /// Called after this post is successfully edited/pinned/unpinned — same
+  /// reasoning as [onDeleted]: `PostActions.update/pin/unpin` only sync the
+  /// home feed's own list, so any other list showing this post needs its
+  /// own refresh to reflect the change without a manual reload.
+  final VoidCallback? onUpdated;
+
   const PostCard({
     super.key,
     required this.post,
     this.initiallyShowComments = false,
     this.openDetailOnTap = true,
     this.onDeleted,
+    this.onUpdated,
   });
 
   @override
@@ -136,7 +144,7 @@ class _PostCardState extends ConsumerState<PostCard> {
               ),
             if ((post.content ?? '').isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(post.content!),
+              PostContentText(content: post.content!, taggedUserIds: post.taggedUserIds),
             ],
             if (post.hasMedia) ...[
               const SizedBox(height: 10),
@@ -211,13 +219,15 @@ class _PostCardState extends ConsumerState<PostCard> {
     try {
       switch (value) {
         case 'edit':
-          await showPostComposerDialog(context, editing: widget.post);
+          await showPostComposerDialog(context, editing: widget.post, onPosted: widget.onUpdated);
           break;
         case 'pin':
           await actions.pin(widget.post.id);
+          widget.onUpdated?.call();
           break;
         case 'unpin':
           await actions.unpin(widget.post.id);
+          widget.onUpdated?.call();
           break;
         case 'delete':
           final confirmed = await showDialog<bool>(
@@ -323,7 +333,7 @@ class _SharedPostPreview extends ConsumerWidget {
               UserInline(userId: post.authorId, avatarRadius: 14),
               if ((post.content ?? '').isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(post.content!),
+                PostContentText(content: post.content!, taggedUserIds: post.taggedUserIds),
               ],
               if (post.hasMedia) ...[
                 const SizedBox(height: 6),

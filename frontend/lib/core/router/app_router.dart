@@ -32,19 +32,41 @@ class _GoRouterRefreshNotifier extends ChangeNotifier {
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _GoRouterRefreshNotifier(ref);
 
+  // go_router has a long-standing bug/design gap on Flutter web: by
+  // default, imperative navigation (context.push, used almost everywhere
+  // in this app — post/profile/group/etc. detail pages) only updates
+  // go_router's own internal state, never the actual browser History API
+  // — so the address bar never changes, and a reload always lands back on
+  // whatever URL the bar was ACTUALLY last set to (e.g. '/'), even though
+  // the app was visibly showing a different page. context.go DOES sync
+  // correctly; this flag makes push/pushReplacement etc. behave the same
+  // way. It's a static field read at GoRouter construction time, not a
+  // constructor parameter — must be set before `GoRouter(...)` runs.
+  // Confirmed via a live debug banner that go_router's own tracked URI was
+  // already correct immediately after push while window.location.href
+  // stayed stale, and that a raw history.pushState call worked fine — the
+  // browser itself was never the problem. See
+  // https://github.com/flutter/flutter/issues/134318
+  GoRouter.optionURLReflectsImperativeAPIs = true;
+
   return GoRouter(
-    initialLocation: '/splash',
+    // No `initialLocation` override and no redirect-to-a-splash-route while
+    // auth is bootstrapping — either one means a plain page reload lands
+    // somewhere other than the URL that was actually in the address bar.
+    // Instead, the app just stays on whatever route the browser asked for;
+    // SocialApp shows a loading overlay on top of it (see main.dart) until
+    // auth status resolves, then this redirect only fires for the cases
+    // that genuinely need to send you elsewhere.
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final authState = ref.read(authProvider);
       final status = authState.status;
       final loggingIn = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
-      final onSplash = state.matchedLocation == '/splash';
 
-      if (status == AuthStatus.unknown) return onSplash ? null : '/splash';
+      if (status == AuthStatus.unknown) return null;
       if (status == AuthStatus.unauthenticated) return loggingIn ? null : '/login';
-      if (status == AuthStatus.authenticated && (loggingIn || onSplash)) return '/';
+      if (status == AuthStatus.authenticated && loggingIn) return '/';
 
       if (state.matchedLocation.startsWith('/admin') &&
           !(authState.account?.isAdmin ?? false)) {
@@ -53,11 +75,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/splash',
-        builder: (context, state) =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
-      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(
           path: '/register', builder: (context, state) => const RegisterPage()),

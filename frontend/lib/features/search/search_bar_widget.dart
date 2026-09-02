@@ -116,7 +116,7 @@ class _SearchBarWidgetState extends ConsumerState<SearchBarWidget> {
             context.push('/search?q=${Uri.encodeQueryComponent(trimmed)}');
           },
           decoration: InputDecoration(
-            hintText: 'Tìm kiếm trên Social',
+            hintText: 'Tìm kiếm trên TSON',
             prefixIcon: _loading
                 ? const Padding(
                     padding: EdgeInsets.all(10),

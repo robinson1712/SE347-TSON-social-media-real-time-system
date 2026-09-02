@@ -2,17 +2,23 @@
 /// RegisterRequest/LoginRequest/AuthResponse/AccessTokenResponse/AccountResponse exactly.
 library;
 
+import 'enums.dart';
+
 class RegisterRequest {
   final String email;
   final String password;
   final String fullName;
   final String? phone;
+  final Gender? gender;
+  final DateTime? dob;
 
   const RegisterRequest({
     required this.email,
     required this.password,
     required this.fullName,
     this.phone,
+    this.gender,
+    this.dob,
   });
 
   Map<String, dynamic> toJson() => {
@@ -20,6 +26,10 @@ class RegisterRequest {
         'password': password,
         'fullName': fullName,
         if (phone != null) 'phone': phone,
+        if (gender != null) 'gender': gender!.toJson(),
+        if (dob != null)
+          'dob':
+              '${dob!.year.toString().padLeft(4, '0')}-${dob!.month.toString().padLeft(2, '0')}-${dob!.day.toString().padLeft(2, '0')}',
       };
 }
 

@@ -31,6 +31,7 @@ class UserInline extends ConsumerWidget {
       error: (_, __) => _shortId,
     );
     final avatarUrl = profileAsync.value?.avatarUrl;
+    final gender = profileAsync.value?.gender;
 
     return InkWell(
       onTap: () => context.push('/profile/$userId'),
@@ -38,7 +39,7 @@ class UserInline extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (showAvatar) ...[
-            Avatar(url: avatarUrl, name: name, radius: avatarRadius),
+            Avatar(url: avatarUrl, name: name, radius: avatarRadius, gender: gender),
             const SizedBox(width: 8),
           ],
           Text(
@@ -65,7 +66,11 @@ class UserAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(userLookupProvider(userId)).value;
-    return Avatar(url: profile?.avatarUrl, name: profile?.fullName ?? '', radius: radius);
+    return Avatar(
+        url: profile?.avatarUrl,
+        name: profile?.fullName ?? '',
+        radius: radius,
+        gender: profile?.gender);
   }
 }
 

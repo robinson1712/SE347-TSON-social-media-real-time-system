@@ -146,7 +146,11 @@ class _DiscoverTab extends ConsumerWidget {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      Avatar(url: profile?.avatarUrl, name: profile?.fullName ?? '', radius: 60),
+                      Avatar(
+                          url: profile?.avatarUrl,
+                          name: profile?.fullName ?? '',
+                          radius: 60,
+                          gender: profile?.gender),
                       const SizedBox(height: 12),
                       Text('${profile?.fullName ?? '...'}, ${candidate.profile.age}',
                           style: Theme.of(context).textTheme.headlineSmall),

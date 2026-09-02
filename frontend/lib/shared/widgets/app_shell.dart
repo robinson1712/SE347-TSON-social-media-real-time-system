@@ -46,11 +46,7 @@ class AppShell extends ConsumerWidget {
         titleSpacing: 12,
         title: Row(
           children: [
-            Text('social',
-                style: TextStyle(
-                    color: Theme.of(context).primaryColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22)),
+            Image.asset('assets/images/logo.png', height: 36),
             const SizedBox(width: 16),
             if (showSidebars) const SearchBarWidget(),
           ],

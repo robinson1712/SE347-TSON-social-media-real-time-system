@@ -99,6 +99,17 @@ class ChatNotifier extends StateNotifier<ChatState> {
         state.messagesByConversation[message.conversationId] ?? const []);
     existing.insert(0, message);
 
+    final knowsConversation =
+        state.conversations.any((c) => c.id == message.conversationId);
+    if (!knowsConversation) {
+      // First message of a conversation someone else just started with us —
+      // we don't have it in `conversations` yet (only fetched once, on
+      // connect), so there's no tile for it to update in the .map() below.
+      // Refetch the list so it actually shows up instead of silently
+      // caching the message somewhere the UI never looks.
+      loadConversations();
+    }
+
     final conversations = state.conversations.map((c) {
       if (c.id != message.conversationId) return c;
       return Conversation(

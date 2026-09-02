@@ -127,6 +127,7 @@ class _PagePosts extends ConsumerWidget {
                         key: ValueKey(p.id),
                         post: p,
                         onDeleted: () => ref.invalidate(_pagePostsProvider(pageId)),
+                        onUpdated: () => ref.invalidate(_pagePostsProvider(pageId)),
                       ))
                   .toList(),
             ),

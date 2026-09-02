@@ -59,9 +59,12 @@ class FriendshipActions {
   Future<void> sendRequest(String targetId) async {
     await _repository.sendFriendRequest(targetId);
     _ref.invalidate(friendshipStatusProvider(targetId));
-    // The backend excludes anyone with a pending request from suggestions —
-    // refresh so a suggestion you just sent a request to disappears.
-    _ref.invalidate(friendSuggestionsProvider);
+    // Deliberately NOT invalidating friendSuggestionsProvider here — the
+    // suggestions sidebar keeps a person visible with an "Hoàn tác" (undo)
+    // button right after you send them a request, so a misclick is
+    // recoverable without them vanishing first. It naturally drops off the
+    // list (backend excludes anyone with a pending request) next time the
+    // suggestions list is actually refetched.
   }
 
   Future<void> dismissSuggestion(String targetId) async {

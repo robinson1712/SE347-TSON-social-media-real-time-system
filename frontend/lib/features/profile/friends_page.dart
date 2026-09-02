@@ -53,7 +53,7 @@ class FriendsPage extends ConsumerWidget {
                         .map((f) => Card(
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
-                                leading: Avatar(url: f.avatarUrl, name: f.fullName),
+                                leading: Avatar(url: f.avatarUrl, name: f.fullName, gender: f.gender),
                                 title: Text(f.fullName),
                                 subtitle: f.location != null ? Text(f.location!) : null,
                                 onTap: () => context.push('/profile/${f.id}'),

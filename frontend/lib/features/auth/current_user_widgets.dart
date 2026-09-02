@@ -23,6 +23,7 @@ class CurrentUserAvatar extends ConsumerWidget {
       url: profile?.avatarUrl,
       name: profile?.fullName ?? account.email,
       radius: radius,
+      gender: profile?.gender,
     );
   }
 }

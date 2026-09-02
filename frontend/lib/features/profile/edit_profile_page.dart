@@ -171,7 +171,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   onTap: _uploadingAvatar ? null : () => _pickAndUpload(isAvatar: true),
                   child: Stack(
                     children: [
-                      Avatar(url: _avatarUrl, name: _fullNameController.text, radius: 44),
+                      Avatar(
+                          url: _avatarUrl,
+                          name: _fullNameController.text,
+                          radius: 44,
+                          gender: _gender),
                       if (_uploadingAvatar)
                         const Positioned.fill(
                             child: Center(child: CircularProgressIndicator())),

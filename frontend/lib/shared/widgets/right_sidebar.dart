@@ -6,6 +6,7 @@ import '../../core/models/friend_suggestion.dart';
 import '../../core/models/user_profile.dart';
 import '../../features/chat/chat_provider.dart';
 import '../../features/profile/profile_provider.dart';
+import '../../features/profile/profile_repository.dart';
 import 'avatar.dart';
 
 /// Facebook-style right sidebar: friends currently online on top, friend
@@ -91,7 +92,11 @@ class _OnlineFriendTile extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Avatar(url: profile.avatarUrl, name: profile.fullName, radius: 16),
+                Avatar(
+                    url: profile.avatarUrl,
+                    name: profile.fullName,
+                    radius: 16,
+                    gender: profile.gender),
                 Positioned(
                   right: -1,
                   bottom: -1,
@@ -148,11 +153,42 @@ class _SuggestionTile extends ConsumerStatefulWidget {
 }
 
 class _SuggestionTileState extends ConsumerState<_SuggestionTile> {
-  bool _sending = false;
+  bool _busy = false;
+
+  /// The just-sent request's id, kept locally so tapping again cancels it
+  /// (Facebook-style "Hoàn tác") without the person vanishing from the list
+  /// first — the suggestions list is deliberately not refetched on send
+  /// (see FriendshipActions.sendRequest) so this state has something to undo.
+  String? _sentFriendshipId;
+
+  ProfileRepository get _repository => ref.read(profileRepositoryProvider);
+
+  Future<void> _sendRequest(String targetId) async {
+    setState(() => _busy = true);
+    await _runSafely(context, () async {
+      final friendship = await _repository.sendFriendRequest(targetId);
+      ref.invalidate(friendshipStatusProvider(targetId));
+      if (mounted) setState(() => _sentFriendshipId = friendship.id);
+    });
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _undoRequest(String targetId) async {
+    final friendshipId = _sentFriendshipId;
+    if (friendshipId == null) return;
+    setState(() => _busy = true);
+    await _runSafely(context, () async {
+      await _repository.declineFriendRequest(friendshipId);
+      ref.invalidate(friendshipStatusProvider(targetId));
+      if (mounted) setState(() => _sentFriendshipId = null);
+    });
+    if (mounted) setState(() => _busy = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = widget.suggestion.profile;
+    final sent = _sentFriendshipId != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -161,7 +197,7 @@ class _SuggestionTileState extends ConsumerState<_SuggestionTile> {
         children: [
           GestureDetector(
             onTap: () => context.push('/profile/${p.id}'),
-            child: Avatar(url: p.avatarUrl, name: p.fullName, radius: 20),
+            child: Avatar(url: p.avatarUrl, name: p.fullName, radius: 20, gender: p.gender),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -184,21 +220,24 @@ class _SuggestionTileState extends ConsumerState<_SuggestionTile> {
                 const SizedBox(height: 6),
                 SizedBox(
                   height: 30,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      textStyle: const TextStyle(fontSize: 12),
-                    ),
-                    onPressed: _sending
-                        ? null
-                        : () async {
-                            setState(() => _sending = true);
-                            await _runSafely(context,
-                                () => ref.read(friendshipActionsProvider).sendRequest(p.id));
-                            if (mounted) setState(() => _sending = false);
-                          },
-                    child: Text(_sending ? 'Đang gửi...' : 'Thêm bạn bè'),
-                  ),
+                  width: double.infinity,
+                  child: sent
+                      ? OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          onPressed: _busy ? null : () => _undoRequest(p.id),
+                          child: Text(_busy ? 'Đang huỷ...' : 'Hoàn tác'),
+                        )
+                      : ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          onPressed: _busy ? null : () => _sendRequest(p.id),
+                          child: Text(_busy ? 'Đang gửi...' : 'Thêm bạn bè'),
+                        ),
                 ),
               ],
             ),

@@ -138,7 +138,7 @@ class NotificationTile extends ConsumerWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Avatar(url: actor?.avatarUrl, name: actorName, radius: 22),
+                Avatar(url: actor?.avatarUrl, name: actorName, radius: 22, gender: actor?.gender),
                 Positioned(right: -2, bottom: -2, child: _TypeBadge(type: n.type)),
               ],
             ),

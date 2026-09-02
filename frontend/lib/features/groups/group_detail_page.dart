@@ -164,6 +164,7 @@ class GroupDetailPage extends ConsumerWidget {
                                             key: ValueKey(p.id),
                                             post: p,
                                             onDeleted: () => ref.invalidate(_groupPostsProvider(groupId)),
+                                            onUpdated: () => ref.invalidate(_groupPostsProvider(groupId)),
                                           ))
                                       .toList(),
                                 ),
