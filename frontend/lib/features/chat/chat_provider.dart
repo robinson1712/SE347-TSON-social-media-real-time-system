@@ -218,7 +218,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   void sendMessage(
     String conversationId,
-    String content, {
+    String? content, {
+    String? mediaUrl,
     String? storyReplyId,
     String? storyReplyPreviewUrl,
   }) {
@@ -227,6 +228,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
       ChatSendRequest(
         conversationId: conversationId,
         content: content,
+        mediaUrl: mediaUrl,
         storyReplyId: storyReplyId,
         storyReplyPreviewUrl: storyReplyPreviewUrl,
       ).toJson(),

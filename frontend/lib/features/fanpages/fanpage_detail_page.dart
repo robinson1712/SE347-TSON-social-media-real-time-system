@@ -19,12 +19,13 @@ class FanpageDetailPage extends ConsumerWidget {
     final myId = ref.watch(currentAccountIdProvider);
     final followersAsync = ref.watch(fanpageFollowersProvider(pageId));
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Trang')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
-          child: asyncPage.when(
+    // No page-level AppBar — the page's own name is already shown
+    // prominently in its header card below, and AppShell owns the app's
+    // one persistent top bar.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: asyncPage.when(
             data: (page) {
               final isFollowing = followersAsync.value?.content
                       .any((f) => f.userId == myId) ??
@@ -98,9 +99,8 @@ class FanpageDetailPage extends ConsumerWidget {
                 ],
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Lỗi: $e'),
-          ),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Text('Lỗi: $e'),
         ),
       ),
     );

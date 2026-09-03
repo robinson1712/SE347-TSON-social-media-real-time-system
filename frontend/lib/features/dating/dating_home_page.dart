@@ -33,54 +33,64 @@ class _DatingHomePageState extends ConsumerState<DatingHomePage>
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(myDatingProfileProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hẹn hò'),
-        bottom: TabBar(controller: _tabController, tabs: const [
-          Tab(text: 'Khám phá'),
-          Tab(text: 'Ghép đôi'),
-        ]),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DatingProfileSetupPage()),
-            ),
-          ),
-        ],
-      ),
-      body: profileAsync.when(
-        data: (profile) {
-          if (profile == null) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.favorite_border, size: 48),
-                    const SizedBox(height: 12),
-                    const Text('Tạo hồ sơ hẹn hò để bắt đầu khám phá'),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const DatingProfileSetupPage()),
-                      ),
-                      child: const Text('Tạo hồ sơ'),
+    // No page-level AppBar — AppShell already owns the app's one persistent
+    // top bar. The tab switcher and settings icon that used to live in this
+    // AppBar are real functionality, so they move inline above the content
+    // instead of disappearing with the bar.
+    return profileAsync.when(
+      data: (profile) {
+        if (profile == null) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.favorite_border, size: 48),
+                  const SizedBox(height: 12),
+                  const Text('Tạo hồ sơ hẹn hò để bắt đầu khám phá'),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DatingProfileSetupPage()),
                     ),
-                  ],
-                ),
+                    child: const Text('Tạo hồ sơ'),
+                  ),
+                ],
               ),
-            );
-          }
-          return TabBarView(
-            controller: _tabController,
-            children: const [_DiscoverTab(), _MatchesTab()],
+            ),
           );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
-      ),
+        }
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TabBar(controller: _tabController, tabs: const [
+                    Tab(text: 'Khám phá'),
+                    Tab(text: 'Ghép đôi'),
+                  ]),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  tooltip: 'Hồ sơ hẹn hò',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DatingProfileSetupPage()),
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: const [_DiscoverTab(), _MatchesTab()],
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Lỗi: $e')),
     );
   }
 }
@@ -235,7 +245,7 @@ class _MatchesTab extends ConsumerWidget {
                             final conversation = await ref
                                 .read(chatProvider.notifier)
                                 .startConversationWith(otherId);
-                            if (context.mounted) context.push('/chat/${conversation.id}');
+                            if (context.mounted) context.go('/chat/${conversation.id}');
                           },
                         ),
                         TextButton(

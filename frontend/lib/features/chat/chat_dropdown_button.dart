@@ -158,7 +158,7 @@ class _ChatDropdownPanel extends ConsumerWidget {
           TextButton(
             onPressed: () {
               onClose();
-              context.push('/chat');
+              context.go('/chat');
             },
             child: const Text('Xem tất cả trong Messenger'),
           ),

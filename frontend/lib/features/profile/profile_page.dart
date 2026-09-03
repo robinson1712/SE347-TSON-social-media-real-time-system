@@ -38,9 +38,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final isMe = myId == widget.userId;
     final profileAsync = ref.watch(viewedProfileProvider(widget.userId));
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Trang cá nhân')),
-      body: profileAsync.when(
+    // No page-level AppBar here — AppShell already renders one persistent
+    // top bar for the whole app; a second one just for this page created a
+    // redundant, empty-feeling "← Trang cá nhân" strip stacked under it.
+    // Facebook's own profile page doesn't have one either — back
+    // navigation is just the browser's back button (works correctly now
+    // that go_router's imperative pushes sync to it — see app_router.dart).
+    return profileAsync.when(
         data: (profile) => Center(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -84,11 +88,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             },
           ),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('Không tải được trang cá nhân: $e'),
-        ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('Không tải được trang cá nhân: $e'),
       ),
     );
   }
@@ -576,7 +579,7 @@ class _FriendshipActionsRowState extends ConsumerState<_FriendshipActionsRow> {
               final conversation = await ref
                   .read(chatProvider.notifier)
                   .startConversationWith(widget.targetId);
-              if (context.mounted) context.push('/chat/${conversation.id}');
+              if (context.mounted) context.go('/chat/${conversation.id}');
             }),
           ),
           OutlinedButton.icon(

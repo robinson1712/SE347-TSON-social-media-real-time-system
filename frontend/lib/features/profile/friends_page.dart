@@ -22,12 +22,10 @@ class FriendsPage extends ConsumerWidget {
     final friendsAsync = ref.watch(_myFriendsProvider);
     final requestsAsync = ref.watch(pendingFriendRequestsProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Bạn bè')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: ListView(
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
               requestsAsync.when(
@@ -73,7 +71,6 @@ class FriendsPage extends ConsumerWidget {
               ),
             ],
           ),
-        ),
       ),
     );
   }

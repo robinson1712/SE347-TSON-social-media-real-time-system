@@ -4,6 +4,15 @@ import '../../core/models/fanpage.dart';
 import '../../core/models/page_response.dart';
 import 'fanpage_repository.dart';
 
+enum PagesTab { discover, mine }
+
+/// Which pane the Pages section's sidebar has selected — same reasoning as
+/// GroupsTab/groupsSectionTabProvider in group_provider.dart: lifted out of
+/// widget state so AppShell can render the section's sidebar itself
+/// (replacing the app's generic left nav — see app_shell.dart) separately
+/// from the content pane.
+final pagesSectionTabProvider = StateProvider<PagesTab>((ref) => PagesTab.discover);
+
 final fanpageListProvider =
     FutureProvider.family<PageResponse<Fanpage>, String?>((ref, name) {
   return ref.read(fanpageRepositoryProvider).list(name: name);

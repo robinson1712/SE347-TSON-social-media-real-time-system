@@ -8,11 +8,14 @@ import '../../features/chat/chat_dropdown_button.dart';
 import '../../features/chat/chat_provider.dart';
 import '../../features/chat/floating_chat_windows.dart';
 import '../../features/fanpages/fanpage_provider.dart';
+import '../../features/fanpages/fanpages_list_page.dart';
 import '../../features/feed/feed_provider.dart';
 import '../../features/groups/group_provider.dart';
+import '../../features/groups/groups_list_page.dart';
 import '../../features/notifications/notification_bell_button.dart';
 import '../../features/profile/friend_requests_button.dart';
 import '../../features/search/search_bar_widget.dart';
+import '../../core/router/app_router.dart';
 import 'right_sidebar.dart';
 
 /// Facebook-style shell: top bar (logo, search, friend requests, profile
@@ -44,11 +47,22 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 12,
+        // AppBar's `title` is the only slot that sits *before* `actions`
+        // and can grow — so the Facebook-style 3-zone bar (fixed-width
+        // logo+search on the left, nav icons centered in whatever space is
+        // left, fixed-width account icons on the right) is built entirely
+        // inside `title`, with an Expanded+Center for the middle zone,
+        // rather than fighting AppBar's own built-in centerTitle (which
+        // only centers against the WHOLE bar, actions included, not just
+        // the remaining space).
         title: Row(
           children: [
-            Image.asset('assets/images/logo.png', height: 36),
-            const SizedBox(width: 16),
-            if (showSidebars) const SearchBarWidget(),
+            Image.asset('assets/images/logo.png', height: 40),
+            const SizedBox(width: 12),
+            if (showSidebars) ...[
+              const SearchBarWidget(),
+              const Expanded(child: Center(child: _CenterNavIcons())),
+            ],
           ],
         ),
         actions: [
@@ -68,13 +82,6 @@ class AppShell extends ConsumerWidget {
           const FriendRequestsButton(),
           const ChatDropdownButton(),
           const NotificationBellButton(),
-          IconButton(
-            icon: const Icon(Icons.home_outlined),
-            onPressed: () {
-              context.go('/');
-              ref.read(feedProvider.notifier).refresh();
-            },
-          ),
           PopupMenuButton<String>(
             icon: const Padding(
               padding: EdgeInsets.all(4),
@@ -105,7 +112,10 @@ class AppShell extends ConsumerWidget {
           if (showSidebars)
             SizedBox(
               width: 260,
-              child: _LeftNav(myId: myId, isAdmin: ref.watch(authProvider).account?.isAdmin ?? false),
+              child: _LeftSidebarSlot(
+                myId: myId,
+                isAdmin: ref.watch(authProvider).account?.isAdmin ?? false,
+              ),
             ),
           Expanded(
             flex: 3,
@@ -117,6 +127,138 @@ class AppShell extends ConsumerWidget {
               child: RightSidebar(),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Swaps the app's generic left nav for a section's own sidebar while a
+/// route from that section is open — currently Groups and Pages, both of
+/// which already have real sub-navigation of their own (discover vs.
+/// your-groups/pages, a quick-jump list). Showing both at once would just
+/// be two overlapping navigation menus for no benefit, and the section's
+/// own header controls plus this app's top bar (still visible) are enough
+/// to get back out — same reasoning Facebook's own left rail follows.
+/// Everywhere else keeps the normal [_LeftNav].
+class _LeftSidebarSlot extends ConsumerWidget {
+  final String? myId;
+  final bool isAdmin;
+
+  const _LeftSidebarSlot({required this.myId, required this.isAdmin});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(appRouterProvider);
+    return ValueListenableBuilder<RouteInformation>(
+      valueListenable: router.routeInformationProvider,
+      builder: (context, info, _) {
+        final path = info.uri.path;
+        if (path.startsWith('/groups')) return const GroupsSidebar();
+        if (path.startsWith('/pages')) return const PagesSidebar();
+        return _LeftNav(myId: myId, isAdmin: isAdmin);
+      },
+    );
+  }
+}
+
+/// The top bar's centered row of section icons — Facebook's own bar has
+/// Home/Watch/Marketplace/Groups/Gaming here; this app's equivalent
+/// high-traffic sections are Home, Reels, Groups, Pages and Dating. The
+/// active one gets Facebook's exact treatment: tinted icon plus a colored
+/// bar along the bottom edge.
+class _CenterNavIcons extends ConsumerWidget {
+  const _CenterNavIcons();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(appRouterProvider);
+    // The ShellRoute builder's own `state` argument (app_router.dart) only
+    // reflects fresh navigation reliably for `context.go` — with
+    // `context.push` (used by every one of these icons except Home) it can
+    // go stale, so the row kept showing "Bảng tin" highlighted after
+    // pushing to e.g. /reels even though the URL and page both changed
+    // correctly. `routeInformationProvider` is a real ValueListenable that
+    // updates on every navigation regardless of push vs go — same fix as
+    // the earlier go_router URL-sync investigation used for a live debug
+    // reading, just kept here instead of thrown away.
+    return ValueListenableBuilder<RouteInformation>(
+      valueListenable: router.routeInformationProvider,
+      builder: (context, info, _) {
+        final currentPath = info.uri.path;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CenterNavIcon(
+              icon: Icons.home,
+              selected: currentPath == '/',
+              tooltip: 'Bảng tin',
+              onTap: () {
+                context.go('/');
+                ref.read(feedProvider.notifier).refresh();
+              },
+            ),
+            _CenterNavIcon(
+              icon: Icons.ondemand_video,
+              selected: currentPath.startsWith('/reels'),
+              tooltip: 'Reels',
+              onTap: () => context.push('/reels'),
+            ),
+            _CenterNavIcon(
+              icon: Icons.groups,
+              selected: currentPath.startsWith('/groups'),
+              tooltip: 'Nhóm',
+              onTap: () => context.push('/groups'),
+            ),
+            _CenterNavIcon(
+              icon: Icons.flag,
+              selected: currentPath.startsWith('/pages'),
+              tooltip: 'Trang',
+              onTap: () => context.push('/pages'),
+            ),
+            _CenterNavIcon(
+              icon: Icons.favorite,
+              selected: currentPath.startsWith('/dating'),
+              tooltip: 'Hẹn hò',
+              onTap: () => context.push('/dating'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CenterNavIcon extends StatelessWidget {
+  final IconData icon;
+  final bool selected;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _CenterNavIcon({
+    required this.icon,
+    required this.selected,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? Theme.of(context).primaryColor : Colors.grey.shade600;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: 88,
+          height: 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: selected ? color : Colors.transparent, width: 3),
+            ),
+          ),
+          child: Icon(icon, color: color, size: 26),
+        ),
       ),
     );
   }
@@ -179,7 +321,7 @@ class _LeftNav extends ConsumerWidget {
           icon: Icons.chat_bubble_outline,
           label: 'Trò chuyện',
           badgeCount: chatUnread,
-          onTap: () => context.push('/chat'),
+          onTap: () => context.go('/chat'),
         ),
         if (isAdmin) ...[
           const Divider(),

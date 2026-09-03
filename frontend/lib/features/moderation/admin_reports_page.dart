@@ -25,57 +25,65 @@ class _AdminReportsPageState extends ConsumerState<AdminReportsPage> {
     );
     final asyncReports = ref.watch(allReportsProvider(filter));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Duyệt báo cáo'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('Tất cả'),
-                  selected: _statusFilter == null,
-                  onSelected: (_) => setState(() => _statusFilter = null),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Chờ xử lý'),
-                  selected: _statusFilter == ReportStatus.pending,
-                  onSelected: (_) => setState(() => _statusFilter = ReportStatus.pending),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Đã xử lý'),
-                  selected: _statusFilter == ReportStatus.actionTaken,
-                  onSelected: (_) => setState(() => _statusFilter = ReportStatus.actionTaken),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Đã bỏ qua'),
-                  selected: _statusFilter == ReportStatus.dismissed,
-                  onSelected: (_) => setState(() => _statusFilter = ReportStatus.dismissed),
-                ),
-              ],
+    // No page-level AppBar — AppShell already owns the app's one persistent
+    // top bar. The status filter chips that used to live in this AppBar's
+    // `bottom` are real functionality (not just a title), so they move
+    // inline above the list instead of disappearing with it.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: Text('Duyệt báo cáo', style: Theme.of(context).textTheme.titleLarge),
             ),
-          ),
-        ),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: asyncReports.when(
-            data: (page) => page.content.isEmpty
-                ? Center(child: Text('Không có báo cáo nào', style: TextStyle(color: Colors.grey.shade600)))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: page.content.length,
-                    itemBuilder: (context, index) => _ReportCard(report: page.content[index]),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Tất cả'),
+                    selected: _statusFilter == null,
+                    onSelected: (_) => setState(() => _statusFilter = null),
                   ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Lỗi: $e')),
-          ),
+                  ChoiceChip(
+                    label: const Text('Chờ xử lý'),
+                    selected: _statusFilter == ReportStatus.pending,
+                    onSelected: (_) => setState(() => _statusFilter = ReportStatus.pending),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Đã xử lý'),
+                    selected: _statusFilter == ReportStatus.actionTaken,
+                    onSelected: (_) => setState(() => _statusFilter = ReportStatus.actionTaken),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Đã bỏ qua'),
+                    selected: _statusFilter == ReportStatus.dismissed,
+                    onSelected: (_) => setState(() => _statusFilter = ReportStatus.dismissed),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: asyncReports.when(
+                data: (page) => page.content.isEmpty
+                    ? Center(
+                        child: Text('Không có báo cáo nào',
+                            style: TextStyle(color: Colors.grey.shade600)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: page.content.length,
+                        itemBuilder: (context, index) => _ReportCard(report: page.content[index]),
+                      ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Lỗi: $e')),
+              ),
+            ),
+          ],
         ),
       ),
     );

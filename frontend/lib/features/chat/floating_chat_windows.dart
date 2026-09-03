@@ -5,6 +5,9 @@ import '../../core/models/chat.dart';
 import '../../shared/widgets/presence_avatar.dart';
 import '../../shared/widgets/user_inline.dart';
 import '../auth/auth_provider.dart';
+import 'chat_composer_bar.dart';
+import 'chat_message_bubble.dart';
+import 'chat_message_kind.dart';
 import 'chat_provider.dart';
 
 const double _kWindowWidth = 300;
@@ -47,21 +50,6 @@ class _FloatingChatWindow extends ConsumerStatefulWidget {
 }
 
 class _FloatingChatWindowState extends ConsumerState<_FloatingChatWindow> {
-  final _controller = TextEditingController();
-
-  void _send() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    ref.read(chatProvider.notifier).sendMessage(widget.conversationId, text);
-    _controller.clear();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatProvider);
@@ -101,24 +89,41 @@ class _FloatingChatWindowState extends ConsumerState<_FloatingChatWindow> {
                   itemBuilder: (context, index) {
                     final m = messages[index];
                     final mine = m.senderId == myId;
-                    return Align(
-                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 2),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        constraints: const BoxConstraints(maxWidth: 220),
-                        decoration: BoxDecoration(
-                          color: mine ? Theme.of(context).primaryColor : const Color(0xFFF0F2F5),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          m.deleted ? '(tin nhắn đã xoá)' : (m.content ?? ''),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: mine ? Colors.white : Colors.black87,
-                            fontStyle: m.deleted ? FontStyle.italic : FontStyle.normal,
+                    final isSticker = !m.deleted && isStickerMessage(m.content);
+                    final showAvatar =
+                        !mine && (index == 0 || messages[index - 1].senderId != m.senderId);
+
+                    final bubble = Container(
+                      margin: const EdgeInsets.symmetric(vertical: 1),
+                      padding: isSticker
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      constraints: const BoxConstraints(maxWidth: 190),
+                      decoration: isSticker
+                          ? null
+                          : BoxDecoration(
+                              color: mine ? Theme.of(context).primaryColor : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                      child: ChatMessageBody(message: m, mine: mine, compact: true),
+                    );
+
+                    if (mine) {
+                      return Align(alignment: Alignment.centerRight, child: bubble);
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            child: showAvatar ? UserAvatar(userId: m.senderId, radius: 10) : null,
                           ),
-                        ),
+                          const SizedBox(width: 4),
+                          Flexible(child: bubble),
+                        ],
                       ),
                     );
                   },
@@ -126,28 +131,7 @@ class _FloatingChatWindowState extends ConsumerState<_FloatingChatWindow> {
               ),
               Padding(
                 padding: const EdgeInsets.all(6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        style: const TextStyle(fontSize: 13),
-                        decoration: const InputDecoration(
-                          hintText: 'Aa',
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          border:
-                              OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(18))),
-                        ),
-                        onSubmitted: (_) => _send(),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.send, size: 18),
-                      onPressed: _send,
-                    ),
-                  ],
-                ),
+                child: ChatComposerBar(conversationId: widget.conversationId, compact: true),
               ),
             ],
           ],

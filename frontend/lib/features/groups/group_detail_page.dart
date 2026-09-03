@@ -24,12 +24,13 @@ class GroupDetailPage extends ConsumerWidget {
     final asyncGroup = ref.watch(groupDetailProvider(groupId));
     final myId = ref.watch(currentAccountIdProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Nhóm')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: asyncGroup.when(
+    // No page-level AppBar — the group's own name is already shown
+    // prominently in its header card below, and AppShell owns the app's
+    // one persistent top bar.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: asyncGroup.when(
             data: (group) {
               final membersAsync = ref.watch(groupMembersProvider(groupId));
               final myMembership = membersAsync.value?.content
@@ -177,9 +178,8 @@ class GroupDetailPage extends ConsumerWidget {
                 ],
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Lỗi: $e'),
-          ),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Text('Lỗi: $e'),
         ),
       ),
     );

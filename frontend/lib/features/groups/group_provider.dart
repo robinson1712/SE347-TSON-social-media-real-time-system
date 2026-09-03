@@ -5,6 +5,16 @@ import '../../core/models/group.dart';
 import '../../core/models/page_response.dart';
 import 'group_repository.dart';
 
+enum GroupsTab { discover, mine }
+
+/// Which pane the Groups section's sidebar has selected — lifted out of
+/// GroupsListPage's own widget state so AppShell can render that sidebar
+/// itself (replacing the app's generic left nav while inside this section,
+/// per the user's request — see app_shell.dart) while the actual list
+/// content stays in a separate widget elsewhere in the tree; both need to
+/// agree on the current tab without one being a child of the other.
+final groupsSectionTabProvider = StateProvider<GroupsTab>((ref) => GroupsTab.discover);
+
 final groupListProvider =
     FutureProvider.family<PageResponse<Group>, String?>((ref, name) {
   return ref.read(groupRepositoryProvider).list(name: name);

@@ -41,10 +41,22 @@ class CommentSectionNotifier extends StateNotifier<CommentSectionState> {
   }
 
   Future<void> load() async {
+    // Fired unawaited from the constructor once a post's comments are
+    // expanded — same reasoning as ReactionNotifier._load in
+    // reaction_provider.dart: with no surrounding try/catch this bypasses
+    // Riverpod's AsyncValue error boundary entirely and an uncaught
+    // failure (e.g. comment-service timing out) crashes the whole app via
+    // the global handler in main.dart instead of just leaving this
+    // section empty.
     state = state.copyWith(loading: true);
-    final page = await _repository.topLevel(postId);
-    if (!mounted) return;
-    state = state.copyWith(topLevel: page.content, loading: false);
+    try {
+      final page = await _repository.topLevel(postId);
+      if (!mounted) return;
+      state = state.copyWith(topLevel: page.content, loading: false);
+    } catch (_) {
+      if (!mounted) return;
+      state = state.copyWith(loading: false);
+    }
   }
 
   Future<void> addComment(String content, {String? parentCommentId}) async {
@@ -77,11 +89,18 @@ class CommentSectionNotifier extends StateNotifier<CommentSectionState> {
     expanded.add(parentId);
     state = state.copyWith(expandedParents: expanded);
     if (!state.repliesByParent.containsKey(parentId)) {
-      final page = await _repository.replies(parentId);
-      if (!mounted) return;
-      state = state.copyWith(
-        repliesByParent: {...state.repliesByParent, parentId: page.content},
-      );
+      // Called fire-and-forget from the UI (no await/catch at the call
+      // site) — same crash risk as load() above if this fails.
+      try {
+        final page = await _repository.replies(parentId);
+        if (!mounted) return;
+        state = state.copyWith(
+          repliesByParent: {...state.repliesByParent, parentId: page.content},
+        );
+      } catch (_) {
+        // Leave expandedParents as-is; replies just don't show up rather
+        // than crashing the app.
+      }
     }
   }
 

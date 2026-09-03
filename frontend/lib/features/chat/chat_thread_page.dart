@@ -5,18 +5,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/models/chat.dart';
+import '../../shared/widgets/presence_avatar.dart';
 import '../../shared/widgets/user_inline.dart';
 import '../auth/auth_provider.dart';
 import '../profile/user_lookup_provider.dart';
+import 'chat_composer_bar.dart';
+import 'chat_message_bubble.dart';
+import 'chat_message_kind.dart';
 import 'chat_provider.dart';
 
-class ChatThreadPage extends ConsumerStatefulWidget {
+/// The right-hand panel of the Messenger-style split view in
+/// [ChatSplitPage] (chat_split_page.dart) — the message history, its own
+/// inline header (avatar/name — not a Scaffold AppBar, since this is one
+/// panel among others, not a standalone page), and the composer. No
+/// Scaffold/AppBar of its own so it can sit directly inside that page's
+/// Row without a second, redundant top bar.
+class ChatThreadPanel extends ConsumerStatefulWidget {
   final String conversationId;
 
-  const ChatThreadPage({super.key, required this.conversationId});
+  const ChatThreadPanel({super.key, required this.conversationId});
 
   @override
-  ConsumerState<ChatThreadPage> createState() => _ChatThreadPageState();
+  ConsumerState<ChatThreadPanel> createState() => _ChatThreadPanelState();
 }
 
 class _StoryReplyPreview extends StatelessWidget {
@@ -47,8 +57,53 @@ class _StoryReplyPreview extends StatelessWidget {
   }
 }
 
-class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
-  final _controller = TextEditingController();
+/// Messenger-style start-of-conversation marker: big avatar + name centered
+/// above the oldest loaded message. Purely decorative — this app has no
+/// per-conversation "who created this" data to show beyond that, and no
+/// end-to-end encryption to truthfully claim the way Messenger's own card
+/// does, so this sticks to what's actually true about the conversation.
+class _ConversationIntroCard extends ConsumerWidget {
+  final String? otherId;
+
+  const _ConversationIntroCard({required this.otherId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = otherId == null ? null : ref.watch(userLookupProvider(otherId!)).value?.fullName;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
+      child: Column(
+        children: [
+          if (otherId != null) UserAvatar(userId: otherId!, radius: 40) else _GroupAvatarPlaceholder(),
+          const SizedBox(height: 10),
+          if (name != null)
+            Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          const SizedBox(height: 4),
+          Text(
+            name == null
+                ? 'Đây là phần mở đầu cuộc trò chuyện của bạn.'
+                : 'Đây là phần mở đầu cuộc trò chuyện của bạn với $name.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupAvatarPlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 40,
+      backgroundColor: Colors.grey.shade300,
+      child: Icon(Icons.groups, size: 36, color: Colors.grey.shade600),
+    );
+  }
+}
+
+class _ChatThreadPanelState extends ConsumerState<ChatThreadPanel> {
   Timer? _refreshTimer;
 
   // Captured once while `ref` is guaranteed valid, then used directly
@@ -84,15 +139,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   void dispose() {
     _refreshTimer?.cancel();
     _chatNotifier.closeConversation(widget.conversationId);
-    _controller.dispose();
     super.dispose();
-  }
-
-  void _send() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    _chatNotifier.sendMessage(widget.conversationId, text);
-    _controller.clear();
   }
 
   @override
@@ -119,96 +166,118 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
         : -1;
     final lastMineSeen = lastMineIndex >= 0 && messages[lastMineIndex].readBy.contains(otherId);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: otherId == null ? const Text('Trò chuyện') : UserNameText(userId: otherId),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: Column(
+    return Column(
+      children: [
+        Container(
+          height: 60,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+          child: Row(
             children: [
-              Expanded(
-                child: loading && messages.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView.builder(
-                        reverse: true,
-                        padding: const EdgeInsets.all(12),
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final m = messages[index];
-                          final mine = m.senderId == myId;
-                          return Align(
-                            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 3),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              constraints: const BoxConstraints(maxWidth: 420),
-                              decoration: BoxDecoration(
-                                color: mine
-                                    ? Theme.of(context).primaryColor
-                                    : const Color(0xFFF0F2F5),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (!m.deleted && m.storyReplyId != null)
-                                    _StoryReplyPreview(
-                                      previewUrl: m.storyReplyPreviewUrl,
-                                      mine: mine,
-                                    ),
-                                  Text(
-                                    m.deleted ? '(tin nhắn đã xoá)' : (m.content ?? ''),
-                                    style: TextStyle(
-                                      color: mine ? Colors.white : Colors.black87,
-                                      fontStyle: m.deleted ? FontStyle.italic : FontStyle.normal,
-                                    ),
-                                  ),
-                                  if (m.sentAt != null)
-                                    Text(
-                                      DateFormat('HH:mm').format(m.sentAt!),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: mine ? Colors.white70 : Colors.grey.shade600,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              if (lastMineSeen)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12, bottom: 4),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('Đã xem',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        decoration: const InputDecoration(hintText: 'Nhắn tin...'),
-                        onSubmitted: (_) => _send(),
-                      ),
-                    ),
-                    IconButton(icon: const Icon(Icons.send), onPressed: _send),
-                  ],
-                ),
-              ),
+              if (otherId != null) ...[
+                PresenceAvatar(userId: otherId, radius: 18),
+                const SizedBox(width: 10),
+                UserNameText(userId: otherId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ] else
+                const Text('Nhóm chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
         ),
-      ),
+        Expanded(
+          child: loading && messages.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(12),
+                  // +1 for the profile intro card — with `reverse: true`
+                  // (index 0 = newest, rendered at the bottom), the LAST
+                  // index ends up drawn at the very top of the scroll view,
+                  // i.e. above the oldest loaded message — exactly where
+                  // Messenger's own start-of-conversation card sits.
+                  itemCount: messages.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == messages.length) {
+                      return _ConversationIntroCard(otherId: otherId);
+                    }
+                    final m = messages[index];
+                    final mine = m.senderId == myId;
+                    final isSticker = !m.deleted && isStickerMessage(m.content);
+                    // The list is reversed (index 0 = newest), so "last
+                    // message in a consecutive run from this sender" — the
+                    // one Messenger hangs the little avatar off of — is the
+                    // one whose NEXT-newer neighbor (index - 1) is from
+                    // someone else.
+                    final showAvatar =
+                        !mine && (index == 0 || messages[index - 1].senderId != m.senderId);
+
+                    final bubble = Container(
+                      margin: const EdgeInsets.symmetric(vertical: 1.5),
+                      padding: isSticker
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      constraints: const BoxConstraints(maxWidth: 380),
+                      decoration: isSticker
+                          ? null
+                          : BoxDecoration(
+                              color: mine ? Theme.of(context).primaryColor : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!m.deleted && m.storyReplyId != null)
+                            _StoryReplyPreview(previewUrl: m.storyReplyPreviewUrl, mine: mine),
+                          ChatMessageBody(message: m, mine: mine),
+                          if (m.sentAt != null)
+                            Text(
+                              DateFormat('HH:mm').format(m.sentAt!),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: !isSticker && mine ? Colors.white70 : Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+
+                    if (mine) {
+                      return Align(alignment: Alignment.centerRight, child: bubble);
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1.5),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 26,
+                            child: showAvatar ? UserAvatar(userId: m.senderId, radius: 13) : null,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(child: bubble),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+        if (lastMineSeen)
+          Padding(
+            padding: const EdgeInsets.only(right: 12, bottom: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text('Đã xem', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+            ),
+          ),
+        DecoratedBox(
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.grey.shade200))),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: ChatComposerBar(conversationId: widget.conversationId),
+          ),
+        ),
+      ],
     );
   }
 }

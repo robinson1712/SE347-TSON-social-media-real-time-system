@@ -5,46 +5,36 @@ import 'package:go_router/go_router.dart';
 import '../../shared/widgets/avatar.dart';
 import 'search_repository.dart';
 
-class SearchResultsPage extends ConsumerStatefulWidget {
+class SearchResultsPage extends ConsumerWidget {
   final String query;
 
   const SearchResultsPage({super.key, required this.query});
 
   @override
-  ConsumerState<SearchResultsPage> createState() => _SearchResultsPageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncResults = ref.watch(_searchResultsProvider(query));
 
-class _SearchResultsPageState extends ConsumerState<SearchResultsPage> {
-  late final TextEditingController _controller = TextEditingController(text: widget.query);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final asyncResults = ref.watch(_searchResultsProvider(widget.query));
-
-    return Scaffold(
-      appBar: AppBar(
-        title: TextField(
-          controller: _controller,
-          decoration: const InputDecoration(hintText: 'Tìm kiếm...', border: InputBorder.none),
-          onSubmitted: (q) {
-            if (q.trim().isNotEmpty) context.go('/search?q=${Uri.encodeQueryComponent(q.trim())}');
-          },
-        ),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: asyncResults.when(
+    // No page-level AppBar/search-field here — AppShell's own persistent
+    // top bar already has a search box (SearchBarWidget) that lands back on
+    // this same page with a new query; a second search field just for this
+    // page duplicated it.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: Text('Kết quả tìm kiếm cho "$query"',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            Expanded(
+              child: asyncResults.when(
             data: (results) {
               if (results.isEmpty) {
                 return Center(
-                  child: Text('Không tìm thấy kết quả cho "${widget.query}"',
+                  child: Text('Không tìm thấy kết quả cho "$query"',
                       style: TextStyle(color: Colors.grey.shade600)),
                 );
               }
@@ -100,9 +90,11 @@ class _SearchResultsPageState extends ConsumerState<SearchResultsPage> {
                 ],
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Lỗi: $e')),
-          ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Lỗi: $e')),
+              ),
+            ),
+          ],
         ),
       ),
     );

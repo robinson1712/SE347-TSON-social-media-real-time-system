@@ -5,8 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
-import '../../features/chat/chat_thread_page.dart';
-import '../../features/chat/conversations_page.dart';
+import '../../features/chat/chat_split_page.dart';
 import '../../features/dating/dating_home_page.dart';
 import '../../features/fanpages/fanpage_detail_page.dart';
 import '../../features/fanpages/fanpages_list_page.dart';
@@ -107,11 +106,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/reels', builder: (context, state) => const ReelsFeedPage()),
           GoRoute(path: '/dating', builder: (context, state) => const DatingHomePage()),
-          GoRoute(path: '/chat', builder: (context, state) => const ConversationsPage()),
+          GoRoute(path: '/chat', builder: (context, state) => const ChatSplitPage()),
           GoRoute(
             path: '/chat/:id',
             builder: (context, state) =>
-                ChatThreadPage(conversationId: state.pathParameters['id']!),
+                ChatSplitPage(conversationId: state.pathParameters['id']!),
           ),
           GoRoute(
             path: '/search',

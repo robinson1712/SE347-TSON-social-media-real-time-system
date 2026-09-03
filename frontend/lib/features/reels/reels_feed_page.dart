@@ -30,15 +30,19 @@ class _ReelsFeedPageState extends ConsumerState<ReelsFeedPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(reelFeedProvider);
 
+    // No AppBar — AppShell already owns the app's one persistent top bar,
+    // and this page is meant to be an immersive full-bleed video view (like
+    // Reels/TikTok) where a second bar just eats into that. The "+" create
+    // button that used to live in the AppBar's actions is real
+    // functionality, so it moves to a floating button over the video
+    // instead of disappearing with the bar.
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.white24,
         foregroundColor: Colors.white,
-        title: const Text('Reels'),
-        actions: [
-          IconButton(icon: const Icon(Icons.add), onPressed: () => showCreateReelDialog(context)),
-        ],
+        onPressed: () => showCreateReelDialog(context),
+        child: const Icon(Icons.add),
       ),
       body: state.loading
           ? const Center(child: CircularProgressIndicator())
