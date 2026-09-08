@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
-/// Autoplaying, looping, tap-to-mute video player for a single reel.
-class ReelVideoPlayer extends StatefulWidget {
+import '../../features/reels/reel_provider.dart';
+
+/// Autoplaying, looping, tap-to-mute video player for a single reel. Mute
+/// is shared via [reelMutedProvider] rather than owned as private State —
+/// the action column next to this player renders the actual mute icon (see
+/// reels_feed_page.dart), so both need to agree on the same on/off value;
+/// this widget still supports tap-anywhere-on-the-video as a shortcut.
+class ReelVideoPlayer extends ConsumerStatefulWidget {
+  final String reelId;
   final String videoUrl;
   final bool autoplay;
 
-  const ReelVideoPlayer({super.key, required this.videoUrl, this.autoplay = true});
+  const ReelVideoPlayer({super.key, required this.reelId, required this.videoUrl, this.autoplay = true});
 
   @override
-  State<ReelVideoPlayer> createState() => _ReelVideoPlayerState();
+  ConsumerState<ReelVideoPlayer> createState() => _ReelVideoPlayerState();
 }
 
-class _ReelVideoPlayerState extends State<ReelVideoPlayer> {
+class _ReelVideoPlayerState extends ConsumerState<ReelVideoPlayer> {
   late final VideoPlayerController _controller;
-  bool _muted = true;
   bool _ready = false;
   bool _failed = false;
 
@@ -62,8 +69,9 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer> {
   }
 
   void _toggleMute() {
-    setState(() => _muted = !_muted);
-    _controller.setVolume(_muted ? 0 : 1);
+    final muted = !ref.read(reelMutedProvider(widget.reelId));
+    ref.read(reelMutedProvider(widget.reelId).notifier).state = muted;
+    _controller.setVolume(muted ? 0 : 1);
   }
 
   @override
@@ -83,25 +91,21 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer> {
     if (!_ready) {
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
+    // Applies the shared mute state to this controller whenever it changes
+    // (including from the action column's own mute button, not just the
+    // tap-on-video shortcut below).
+    ref.listen<bool>(reelMutedProvider(widget.reelId), (previous, muted) {
+      _controller.setVolume(muted ? 0 : 1);
+    });
     return GestureDetector(
       onTap: _toggleMute,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _controller.value.size.width,
-              height: _controller.value.size.height,
-              child: VideoPlayer(_controller),
-            ),
-          ),
-          Positioned(
-            bottom: 12,
-            right: 12,
-            child: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white70),
-          ),
-        ],
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: _controller.value.size.width,
+          height: _controller.value.size.height,
+          child: VideoPlayer(_controller),
+        ),
       ),
     );
   }

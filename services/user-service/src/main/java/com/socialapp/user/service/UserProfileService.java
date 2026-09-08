@@ -49,6 +49,9 @@ public class UserProfileService {
         if (request.location() != null) {
             profile.setLocation(request.location());
         }
+        if (request.workplace() != null) {
+            profile.setWorkplace(request.workplace());
+        }
         if (request.readReceiptsEnabled() != null) {
             profile.setReadReceiptsEnabled(request.readReceiptsEnabled());
         }

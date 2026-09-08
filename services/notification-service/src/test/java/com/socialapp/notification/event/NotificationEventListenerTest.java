@@ -101,7 +101,7 @@ class NotificationEventListenerTest {
     @Test
     void onCommentCreated_authorNotOwner_notifiesPostOwner() {
         stubSaveEcho();
-        CommentCreatedEvent event = new CommentCreatedEvent("c1", "post-1", "alice", "bob", null, Instant.now());
+        CommentCreatedEvent event = new CommentCreatedEvent("c1", "POST", "post-1", "alice", "bob", null, Instant.now());
 
         listener.onCommentCreated(event);
 
@@ -116,7 +116,7 @@ class NotificationEventListenerTest {
 
     @Test
     void onCommentCreated_authorIsOwner_selfCommentSkipped() {
-        CommentCreatedEvent event = new CommentCreatedEvent("c1", "post-1", "alice", "alice", null, Instant.now());
+        CommentCreatedEvent event = new CommentCreatedEvent("c1", "POST", "post-1", "alice", "alice", null, Instant.now());
 
         listener.onCommentCreated(event);
 

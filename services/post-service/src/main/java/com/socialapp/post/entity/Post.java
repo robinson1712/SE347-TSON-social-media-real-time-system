@@ -72,6 +72,11 @@ public class Post {
     // is fetched separately (GET /api/posts/{sharedPostId}) rather than embedded.
     private String sharedPostId;
 
+    // Non-null when this post is a share/repost of a reel instead — mutually
+    // exclusive with sharedPostId. Fetched separately from reels-service
+    // (GET /api/reels/{sharedReelId}), same reasoning as sharedPostId above.
+    private String sharedReelId;
+
     @Builder.Default
     private int commentCount = 0;
 

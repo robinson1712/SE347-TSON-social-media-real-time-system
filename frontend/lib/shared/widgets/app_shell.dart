@@ -323,6 +323,11 @@ class _LeftNav extends ConsumerWidget {
           badgeCount: chatUnread,
           onTap: () => context.go('/chat'),
         ),
+        _NavItem(
+          icon: Icons.bookmark_border,
+          label: 'Đã lưu',
+          onTap: () => context.push('/saved'),
+        ),
         if (isAdmin) ...[
           const Divider(),
           _NavItem(

@@ -22,6 +22,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   late final TextEditingController _fullNameController;
   late final TextEditingController _bioController;
   late final TextEditingController _locationController;
+  late final TextEditingController _workplaceController;
   Gender? _gender;
   DateTime? _dob;
   String? _avatarUrl;
@@ -38,7 +39,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     _fullNameController = TextEditingController(text: widget.profile.fullName);
     _bioController = TextEditingController(text: widget.profile.bio ?? '');
     _locationController = TextEditingController(text: widget.profile.location ?? '');
-    _gender = widget.profile.gender;
+    _workplaceController = TextEditingController(text: widget.profile.workplace ?? '');
+    // "Khác" isn't offered in this form's dropdown below (only Nam/Nữ) —
+    // normalize it to unset rather than leaving a value the dropdown has no
+    // matching item for, which throws ("exactly one item with value").
+    _gender = widget.profile.gender == Gender.other ? null : widget.profile.gender;
     _dob = widget.profile.dob;
     _avatarUrl = widget.profile.avatarUrl;
     _coverUrl = widget.profile.coverUrl;
@@ -50,6 +55,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     _fullNameController.dispose();
     _bioController.dispose();
     _locationController.dispose();
+    _workplaceController.dispose();
     super.dispose();
   }
 
@@ -109,6 +115,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
               dob: _dob,
               gender: _gender,
               location: _locationController.text.trim(),
+              workplace: _workplaceController.text.trim(),
               readReceiptsEnabled: _readReceiptsEnabled,
             ),
           );
@@ -205,13 +212,19 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 decoration: const InputDecoration(labelText: 'Nơi ở'),
               ),
               const SizedBox(height: 12),
+              TextField(
+                controller: _workplaceController,
+                decoration: const InputDecoration(
+                    labelText: 'Công việc / Học vấn',
+                    hintText: 'VD: Làm việc tại ABC hoặc Học tại XYZ'),
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<Gender>(
                 value: _gender,
                 decoration: const InputDecoration(labelText: 'Giới tính'),
                 items: const [
                   DropdownMenuItem(value: Gender.male, child: Text('Nam')),
                   DropdownMenuItem(value: Gender.female, child: Text('Nữ')),
-                  DropdownMenuItem(value: Gender.other, child: Text('Khác')),
                 ],
                 onChanged: (v) => setState(() => _gender = v),
               ),
@@ -242,6 +255,17 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 ),
                 value: _readReceiptsEnabled,
                 onChanged: (v) => setState(() => _readReceiptsEnabled = v),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Lưu thay đổi'),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),

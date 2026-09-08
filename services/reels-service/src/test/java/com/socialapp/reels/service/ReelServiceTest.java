@@ -146,6 +146,29 @@ class ReelServiceTest {
         verify(reelRepository, never()).save(any());
     }
 
+    @Test
+    void incrementShareCount_incrementsShareCountAndSaves() {
+        Reel reel = existingReel("reel-1", "author-1");
+        reel.setShareCount(2);
+        when(reelRepository.findById("reel-1")).thenReturn(Optional.of(reel));
+        when(reelRepository.save(any(Reel.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reel result = reelService.incrementShareCount("reel-1");
+
+        assertThat(result.getShareCount()).isEqualTo(3);
+        verify(reelRepository).save(reel);
+    }
+
+    @Test
+    void incrementShareCount_missing_throwsResourceNotFound() {
+        when(reelRepository.findById("missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reelService.incrementShareCount("missing"))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(reelRepository, never()).save(any());
+    }
+
     // ---------- getFeed ranking (mirrors feed-service's FeedQueryService formula) ----------
 
     private Reel reelWithEngagement(String id, java.time.Instant createdAt, int reactionCount, int commentCount, long viewCount) {

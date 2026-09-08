@@ -1,9 +1,14 @@
-/// Mirrors comment-service's `Comment` entity.
+import 'enums.dart';
+
+/// Mirrors comment-service's `Comment` entity — generalized to
+/// (targetType, targetId) rather than a post-only `postId`, since reels
+/// have comments too now (see comment-service's CommentCreatedEvent).
 class Comment {
   final String id;
-  final String postId;
+  final TargetType targetType;
+  final String targetId;
   final String authorId;
-  final String postOwnerId;
+  final String targetOwnerId;
   final String? parentCommentId;
   final String content;
   final DateTime? createdAt;
@@ -12,9 +17,10 @@ class Comment {
 
   const Comment({
     required this.id,
-    required this.postId,
+    required this.targetType,
+    required this.targetId,
     required this.authorId,
-    required this.postOwnerId,
+    required this.targetOwnerId,
     this.parentCommentId,
     required this.content,
     this.createdAt,
@@ -26,9 +32,10 @@ class Comment {
 
   factory Comment.fromJson(Map<String, dynamic> json) => Comment(
         id: json['id'] as String,
-        postId: json['postId'] as String,
+        targetType: TargetTypeJson.fromJson(json['targetType'] as String?),
+        targetId: json['targetId'] as String,
         authorId: json['authorId'] as String,
-        postOwnerId: json['postOwnerId'] as String,
+        targetOwnerId: json['targetOwnerId'] as String,
         parentCommentId: json['parentCommentId'] as String?,
         content: json['content'] as String? ?? '',
         createdAt: json['createdAt'] == null
@@ -42,18 +49,24 @@ class Comment {
 }
 
 class CreateCommentRequest {
-  final String postId;
+  final TargetType targetType;
+  final String targetId;
+  final String targetOwnerId;
   final String content;
   final String? parentCommentId;
 
   const CreateCommentRequest({
-    required this.postId,
+    required this.targetType,
+    required this.targetId,
+    required this.targetOwnerId,
     required this.content,
     this.parentCommentId,
   });
 
   Map<String, dynamic> toJson() => {
-        'postId': postId,
+        'targetType': targetType.toJson(),
+        'targetId': targetId,
+        'targetOwnerId': targetOwnerId,
         'content': content,
         'parentCommentId': parentCommentId,
       };

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/comment.dart';
+import '../../core/models/enums.dart';
 import 'comment_repository.dart';
 
 class CommentSectionState {
@@ -32,10 +33,11 @@ class CommentSectionState {
 
 class CommentSectionNotifier extends StateNotifier<CommentSectionState> {
   final CommentRepository _repository;
-  final String postId;
-  final String postOwnerId;
+  final TargetType targetType;
+  final String targetId;
+  final String targetOwnerId;
 
-  CommentSectionNotifier(this._repository, this.postId, this.postOwnerId)
+  CommentSectionNotifier(this._repository, this.targetType, this.targetId, this.targetOwnerId)
       : super(const CommentSectionState(loading: true)) {
     load();
   }
@@ -50,7 +52,7 @@ class CommentSectionNotifier extends StateNotifier<CommentSectionState> {
     // section empty.
     state = state.copyWith(loading: true);
     try {
-      final page = await _repository.topLevel(postId);
+      final page = await _repository.topLevel(targetType, targetId);
       if (!mounted) return;
       state = state.copyWith(topLevel: page.content, loading: false);
     } catch (_) {
@@ -61,7 +63,9 @@ class CommentSectionNotifier extends StateNotifier<CommentSectionState> {
 
   Future<void> addComment(String content, {String? parentCommentId}) async {
     final comment = await _repository.create(CreateCommentRequest(
-      postId: postId,
+      targetType: targetType,
+      targetId: targetId,
+      targetOwnerId: targetOwnerId,
       content: content,
       parentCommentId: parentCommentId,
     ));
@@ -125,25 +129,27 @@ class CommentSectionNotifier extends StateNotifier<CommentSectionState> {
 final commentRepositoryProvider = Provider((ref) => CommentRepository());
 
 class CommentSectionKey {
-  final String postId;
-  final String postOwnerId;
+  final TargetType targetType;
+  final String targetId;
+  final String targetOwnerId;
 
   const CommentSectionKey(
-      {required this.postId, required this.postOwnerId});
+      {required this.targetType, required this.targetId, required this.targetOwnerId});
 
   @override
   bool operator ==(Object other) =>
-      other is CommentSectionKey && other.postId == postId;
+      other is CommentSectionKey && other.targetType == targetType && other.targetId == targetId;
 
   @override
-  int get hashCode => postId.hashCode;
+  int get hashCode => Object.hash(targetType, targetId);
 }
 
 final commentSectionProvider = StateNotifierProvider.family<
     CommentSectionNotifier, CommentSectionState, CommentSectionKey>(
   (ref, key) => CommentSectionNotifier(
     ref.watch(commentRepositoryProvider),
-    key.postId,
-    key.postOwnerId,
+    key.targetType,
+    key.targetId,
+    key.targetOwnerId,
   ),
 );

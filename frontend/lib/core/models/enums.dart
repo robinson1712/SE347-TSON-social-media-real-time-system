@@ -70,6 +70,13 @@ enum TargetType { post, comment, reel, story }
 
 extension TargetTypeJson on TargetType {
   String toJson() => name.toUpperCase();
+
+  static TargetType fromJson(String? value) {
+    for (final t in TargetType.values) {
+      if (t.name.toUpperCase() == value) return t;
+    }
+    return TargetType.post;
+  }
 }
 
 enum Gender { male, female, other }

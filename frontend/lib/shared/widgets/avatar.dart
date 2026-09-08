@@ -22,6 +22,7 @@ class Avatar extends StatelessWidget {
         width: radius * 2,
         height: radius * 2,
         fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
       ),
     );
     return name.trim().isEmpty ? avatar : Tooltip(message: name, child: avatar);
@@ -39,12 +40,14 @@ class Avatar extends StatelessWidget {
         width: radius * 2,
         height: radius * 2,
         fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
         placeholder: (context, _) => ClipOval(
           child: Image.asset(
             _fallbackAsset,
             width: radius * 2,
             height: radius * 2,
             fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
           ),
         ),
         errorWidget: (context, _, __) => _fallback(),

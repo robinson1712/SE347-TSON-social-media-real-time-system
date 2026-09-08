@@ -50,6 +50,12 @@ class PostActions {
     _ref.read(feedProvider.notifier).prepend(post);
     return post;
   }
+
+  Future<Post> shareReel(String reelId, ShareRequest request) async {
+    final post = await _repository.shareReel(reelId, request);
+    _ref.read(feedProvider.notifier).prepend(post);
+    return post;
+  }
 }
 
 final postActionsProvider = Provider((ref) => PostActions(ref));

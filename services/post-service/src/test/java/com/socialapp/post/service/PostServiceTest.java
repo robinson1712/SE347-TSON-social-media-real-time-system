@@ -8,6 +8,7 @@ import com.socialapp.common.exception.BadRequestException;
 import com.socialapp.common.exception.ForbiddenException;
 import com.socialapp.common.exception.ResourceNotFoundException;
 import com.socialapp.common.security.CurrentUserContext;
+import com.socialapp.post.client.ReelClient;
 import com.socialapp.post.client.UserServiceClient;
 import com.socialapp.post.dto.CreatePostRequest;
 import com.socialapp.post.dto.ShareRequest;
@@ -52,6 +53,8 @@ class PostServiceTest {
     private PostRepository postRepository;
     @Mock
     private UserServiceClient userServiceClient;
+    @Mock
+    private ReelClient reelClient;
 
     private KafkaTemplate<String, Object> kafkaTemplate;
     private PostService postService;
@@ -59,7 +62,7 @@ class PostServiceTest {
     @BeforeEach
     void setUp() {
         kafkaTemplate = mock(KafkaTemplate.class);
-        postService = new PostService(postRepository, kafkaTemplate, userServiceClient);
+        postService = new PostService(postRepository, kafkaTemplate, userServiceClient, reelClient);
     }
 
     @AfterEach
@@ -577,5 +580,55 @@ class PostServiceTest {
         Post shared = postService.sharePost("post-1", new ShareRequest(null, null));
 
         assertThat(shared.getPrivacy()).isEqualTo(Privacy.PUBLIC);
+    }
+
+    // ---------- shareReel ----------
+
+    @Test
+    void shareReel_savesShareBumpsReelShareCountAndPublishesEvent() {
+        CurrentUserContext.setForTests("sharer-1", List.of("USER"));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Post shared = postService.shareReel("reel-1", new ShareRequest("check this reel out", Privacy.PUBLIC));
+
+        assertThat(shared.getAuthorId()).isEqualTo("sharer-1");
+        assertThat(shared.getSharedReelId()).isEqualTo("reel-1");
+        assertThat(shared.getContent()).isEqualTo("check this reel out");
+        verify(reelClient).incrementShareCount("reel-1");
+
+        ArgumentCaptor<PostCreatedEvent> captor = ArgumentCaptor.forClass(PostCreatedEvent.class);
+        verify(kafkaTemplate).send(eq(KafkaTopics.POST_CREATED), eq(shared.getId()), captor.capture());
+        assertThat(captor.getValue().authorId()).isEqualTo("sharer-1");
+    }
+
+    @Test
+    void shareReel_noPrivacySpecified_defaultsToPublic() {
+        CurrentUserContext.setForTests("sharer-1", List.of("USER"));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Post shared = postService.shareReel("reel-1", new ShareRequest(null, null));
+
+        assertThat(shared.getPrivacy()).isEqualTo(Privacy.PUBLIC);
+    }
+
+    @Test
+    void shareReel_profaneComment_throwsBadRequestAndNeverSaves() {
+        CurrentUserContext.setForTests("sharer-1", List.of("USER"));
+
+        assertThatThrownBy(() -> postService.shareReel("reel-1", new ShareRequest("you bitch", Privacy.PUBLIC)))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(postRepository, never()).save(any());
+        verify(reelClient, never()).incrementShareCount(any());
+    }
+
+    @Test
+    void shareReel_blankReelId_throwsBadRequest() {
+        CurrentUserContext.setForTests("sharer-1", List.of("USER"));
+
+        assertThatThrownBy(() -> postService.shareReel("  ", new ShareRequest(null, Privacy.PUBLIC)))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(postRepository, never()).save(any());
     }
 }

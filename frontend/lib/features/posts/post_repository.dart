@@ -84,6 +84,18 @@ class PostRepository {
     }
   }
 
+  Future<Post> shareReel(String reelId, ShareRequest request) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/posts/share-reel/$reelId',
+        data: request.toJson(),
+      );
+      return ApiResponse.fromJson(response.data!, _postFromJson).data!;
+    } on DioException catch (e) {
+      throw toApiException(e);
+    }
+  }
+
   Future<PageResponse<Post>> byAuthor(String authorId,
       {int page = 0, int size = 20}) async {
     try {

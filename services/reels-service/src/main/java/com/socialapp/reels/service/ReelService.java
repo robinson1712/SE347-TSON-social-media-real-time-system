@@ -77,6 +77,14 @@ public class ReelService {
         return reelRepository.save(reel);
     }
 
+    /** Called by post-service (via Feign) when someone shares this reel as a
+     * new post — see PostService.shareReel. */
+    public Reel incrementShareCount(String id) {
+        Reel reel = getReelOrThrow(id);
+        reel.setShareCount(reel.getShareCount() + 1);
+        return reelRepository.save(reel);
+    }
+
     public Page<Reel> getFeed(Pageable pageable) {
         Pageable poolPageable = PageRequest.of(0, CANDIDATE_POOL_SIZE, Sort.by(Sort.Direction.DESC, "createdAt"));
         List<Reel> pool = reelRepository.findAllByOrderByCreatedAtDesc(poolPageable).getContent();

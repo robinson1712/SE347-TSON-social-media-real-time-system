@@ -15,6 +15,7 @@ class Post {
   final String? groupId;
   final String? pageId;
   final String? sharedPostId;
+  final String? sharedReelId;
   final int commentCount;
   final int reactionCount;
   final bool pinned;
@@ -33,6 +34,7 @@ class Post {
     this.groupId,
     this.pageId,
     this.sharedPostId,
+    this.sharedReelId,
     this.commentCount = 0,
     this.reactionCount = 0,
     this.pinned = false,
@@ -41,7 +43,7 @@ class Post {
     this.updatedAt,
   });
 
-  bool get isShare => sharedPostId != null;
+  bool get isShare => sharedPostId != null || sharedReelId != null;
   bool get hasMedia => mediaUrls.isNotEmpty;
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -59,6 +61,7 @@ class Post {
       groupId: json['groupId'] as String?,
       pageId: json['pageId'] as String?,
       sharedPostId: json['sharedPostId'] as String?,
+      sharedReelId: json['sharedReelId'] as String?,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
       reactionCount: (json['reactionCount'] as num?)?.toInt() ?? 0,
       pinned: json['pinned'] as bool? ?? false,

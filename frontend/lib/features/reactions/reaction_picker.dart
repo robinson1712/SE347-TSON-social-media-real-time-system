@@ -6,13 +6,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/enums.dart';
 import 'reaction_provider.dart';
 
-/// Facebook-style reaction control: a plain "Thích" button that reacts with
-/// `like` on tap, and reveals an emoji row on hover (desktop web) or
-/// long-press (touch) to pick a specific reaction type.
+const _likeIconAsset = 'assets/images/like_icon.png';
+
+/// The "like" glyph, everywhere in the app — the other reaction types
+/// (love/haha/wow/sad/angry) still use their emoji (no custom art for
+/// those), but "like" is this asset now, not Material's thumb icon or the
+/// 👍 emoji. Used for both the picker's own current-reaction display and
+/// the emoji row's like option, so there's exactly one place that draws a
+/// "like" anywhere in the app.
+Widget _reactionGlyph(ReactionType? type, {required double size, required Color unlikedTint}) {
+  if (type == null || type == ReactionType.like) {
+    final liked = type == ReactionType.like;
+    return Image.asset(
+      _likeIconAsset,
+      width: size,
+      color: liked ? null : unlikedTint,
+      colorBlendMode: liked ? null : BlendMode.srcIn,
+      // The source PNG is 256x246 — displayed here at ~14-28px, a >10x
+      // downscale. Image's default filterQuality (low) just point-samples
+      // at that ratio instead of averaging neighboring pixels, which is
+      // exactly what turns clean anti-aliased edges into jagged ones. High
+      // quality actually blends the source down properly.
+      filterQuality: FilterQuality.high,
+    );
+  }
+  return Text(type.emoji, style: TextStyle(fontSize: size));
+}
+
+/// Facebook-style reaction control: tapping reacts with `like` (or removes
+/// it, if already liked), hovering (desktop web) or long-pressing (touch)
+/// reveals an emoji row to pick a specific reaction type instead. Used for
+/// posts, comments and reels alike — [showLabel] and [unlikedTint] are the
+/// only per-surface knobs (reels want an icon with no "Thích" text, on a
+/// dark background where the default grey tint would be invisible).
 class ReactionPicker extends ConsumerStatefulWidget {
   final ReactionKey reactionKey;
+  final bool showLabel;
+  final Color unlikedTint;
 
-  const ReactionPicker({super.key, required this.reactionKey});
+  const ReactionPicker({
+    super.key,
+    required this.reactionKey,
+    this.showLabel = true,
+    this.unlikedTint = const Color(0xFF616161), // Colors.grey.shade700
+  });
 
   @override
   ConsumerState<ReactionPicker> createState() => _ReactionPickerState();
@@ -64,7 +101,7 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker> {
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(type.emoji, style: const TextStyle(fontSize: 26)),
+                          child: _reactionGlyph(type, size: 26, unlikedTint: widget.unlikedTint),
                         ),
                       );
                     }).toList(),
@@ -101,22 +138,28 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker> {
         onExit: (_) => _scheduleHide(),
         child: GestureDetector(
           onLongPress: _showPicker,
-          child: TextButton.icon(
-            onPressed: () => ref
-                .read(reactionProvider(widget.reactionKey).notifier)
-                .react(mine ?? ReactionType.like),
-            icon: Text(
-              mine?.emoji ?? '👍',
-              style: const TextStyle(fontSize: 16),
-            ),
-            label: Text(
-              mine == null ? 'Thích' : _label(mine),
-              style: TextStyle(
-                color: mine == null ? Colors.grey.shade700 : Theme.of(context).primaryColor,
-                fontWeight: mine == null ? FontWeight.normal : FontWeight.bold,
-              ),
-            ),
-          ),
+          child: widget.showLabel
+              ? TextButton.icon(
+                  onPressed: () => ref
+                      .read(reactionProvider(widget.reactionKey).notifier)
+                      .react(mine ?? ReactionType.like),
+                  icon: _reactionGlyph(mine, size: 18, unlikedTint: widget.unlikedTint),
+                  label: Text(
+                    mine == null ? 'Thích' : _label(mine),
+                    style: TextStyle(
+                      color: mine == null ? widget.unlikedTint : Theme.of(context).primaryColor,
+                      fontWeight: mine == null ? FontWeight.normal : FontWeight.bold,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  onPressed: () => ref
+                      .read(reactionProvider(widget.reactionKey).notifier)
+                      .react(mine ?? ReactionType.like),
+                  icon: _reactionGlyph(mine, size: 28, unlikedTint: widget.unlikedTint),
+                ),
         ),
       ),
     );
@@ -160,7 +203,10 @@ class ReactionSummaryRow extends ConsumerWidget {
       child: Row(
         children: [
           ...topTypes.take(3).map(
-                (e) => Text(e.key.emoji, style: const TextStyle(fontSize: 14)),
+                (e) => Padding(
+                  padding: const EdgeInsets.only(right: 2),
+                  child: _reactionGlyph(e.key, size: 14, unlikedTint: Colors.grey.shade700),
+                ),
               ),
           const SizedBox(width: 4),
           Text('${state.summary.total}',

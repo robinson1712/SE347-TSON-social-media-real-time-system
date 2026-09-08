@@ -10,6 +10,7 @@ class UserProfile {
   final DateTime? dob;
   final Gender? gender;
   final String? location;
+  final String? workplace;
   final bool readReceiptsEnabled;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -23,6 +24,7 @@ class UserProfile {
     this.dob,
     this.gender,
     this.location,
+    this.workplace,
     this.readReceiptsEnabled = true,
     this.createdAt,
     this.updatedAt,
@@ -39,6 +41,7 @@ class UserProfile {
             : DateTime.tryParse(json['dob'] as String),
         gender: GenderJson.fromJson(json['gender'] as String?),
         location: json['location'] as String?,
+        workplace: json['workplace'] as String?,
         readReceiptsEnabled: json['readReceiptsEnabled'] as bool? ?? true,
         createdAt: json['createdAt'] == null
             ? null
@@ -55,6 +58,7 @@ class UpdateProfileRequest {
   final DateTime? dob;
   final Gender? gender;
   final String? location;
+  final String? workplace;
   final bool? readReceiptsEnabled;
 
   const UpdateProfileRequest({
@@ -63,6 +67,7 @@ class UpdateProfileRequest {
     this.dob,
     this.gender,
     this.location,
+    this.workplace,
     this.readReceiptsEnabled,
   });
 
@@ -74,6 +79,7 @@ class UpdateProfileRequest {
               '${dob!.year.toString().padLeft(4, '0')}-${dob!.month.toString().padLeft(2, '0')}-${dob!.day.toString().padLeft(2, '0')}',
         if (gender != null) 'gender': gender!.toJson(),
         'location': location,
+        'workplace': workplace,
         if (readReceiptsEnabled != null) 'readReceiptsEnabled': readReceiptsEnabled,
       };
 }

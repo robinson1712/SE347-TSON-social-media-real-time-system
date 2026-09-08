@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/dio_client.dart';
 import '../../core/models/api_response.dart';
 import '../../core/models/comment.dart';
+import '../../core/models/enums.dart';
 import '../../core/models/page_response.dart';
 
 Comment _commentFromJson(dynamic json) =>
@@ -23,12 +24,17 @@ class CommentRepository {
     }
   }
 
-  Future<PageResponse<Comment>> topLevel(String postId,
+  Future<PageResponse<Comment>> topLevel(TargetType targetType, String targetId,
       {int page = 0, int size = 20}) async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
-        '/api/comments/post/$postId',
-        queryParameters: {'page': page, 'size': size},
+        '/api/comments',
+        queryParameters: {
+          'targetType': targetType.toJson(),
+          'targetId': targetId,
+          'page': page,
+          'size': size,
+        },
       );
       return ApiResponse.fromJson(
         response.data!,

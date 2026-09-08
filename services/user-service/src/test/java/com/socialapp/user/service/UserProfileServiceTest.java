@@ -112,7 +112,8 @@ class UserProfileServiceTest {
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // Only fullName and location provided; bio, dob, gender left null (unchanged).
-        UpdateProfileRequest request = new UpdateProfileRequest("Alice Updated", null, null, null, "Da Nang", null);
+        UpdateProfileRequest request =
+                new UpdateProfileRequest("Alice Updated", null, null, null, "Da Nang", null, null);
 
         UserProfileResponse response = userProfileService.updateMe("user-1", request);
 
@@ -134,7 +135,7 @@ class UserProfileServiceTest {
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "New Name", "New bio", LocalDate.of(2000, 1, 1), Gender.MALE, "Saigon", false);
+                "New Name", "New bio", LocalDate.of(2000, 1, 1), Gender.MALE, "Saigon", null, false);
 
         UserProfileResponse response = userProfileService.updateMe("user-1", request);
 
@@ -153,7 +154,8 @@ class UserProfileServiceTest {
         when(userProfileRepository.findById("user-1")).thenReturn(Optional.of(existing));
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UpdateProfileRequest request = new UpdateProfileRequest("Alice Updated", null, null, null, null, null);
+        UpdateProfileRequest request =
+                new UpdateProfileRequest("Alice Updated", null, null, null, null, null, null);
 
         UserProfileResponse response = userProfileService.updateMe("user-1", request);
 
@@ -162,7 +164,7 @@ class UserProfileServiceTest {
 
     @Test
     void updateMe_notAuthenticated_throwsUnauthorizedAndNeverSaves() {
-        UpdateProfileRequest request = new UpdateProfileRequest("X", null, null, null, null, null);
+        UpdateProfileRequest request = new UpdateProfileRequest("X", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> userProfileService.updateMe(null, request))
                 .isInstanceOf(UnauthorizedException.class);
@@ -173,7 +175,7 @@ class UserProfileServiceTest {
     @Test
     void updateMe_profileNotFound_throwsResourceNotFound() {
         when(userProfileRepository.findById("user-1")).thenReturn(Optional.empty());
-        UpdateProfileRequest request = new UpdateProfileRequest("X", null, null, null, null, null);
+        UpdateProfileRequest request = new UpdateProfileRequest("X", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> userProfileService.updateMe("user-1", request))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -246,7 +248,8 @@ class UserProfileServiceTest {
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(inv -> inv.getArgument(0));
         ArgumentCaptor<UserProfile> captor = ArgumentCaptor.forClass(UserProfile.class);
 
-        userProfileService.updateMe("user-1", new UpdateProfileRequest("Captured Name", null, null, null, null, null));
+        userProfileService.updateMe(
+                "user-1", new UpdateProfileRequest("Captured Name", null, null, null, null, null, null));
 
         verify(userProfileRepository).save(captor.capture());
         assertThat(captor.getValue().getFullName()).isEqualTo("Captured Name");

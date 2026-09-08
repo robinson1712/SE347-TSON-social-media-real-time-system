@@ -16,11 +16,16 @@ import '../reactions/reaction_provider.dart';
 import 'comment_provider.dart';
 
 class CommentSection extends ConsumerStatefulWidget {
-  final String postId;
-  final String postOwnerId;
+  final TargetType targetType;
+  final String targetId;
+  final String targetOwnerId;
 
-  const CommentSection(
-      {super.key, required this.postId, required this.postOwnerId});
+  const CommentSection({
+    super.key,
+    this.targetType = TargetType.post,
+    required this.targetId,
+    required this.targetOwnerId,
+  });
 
   @override
   ConsumerState<CommentSection> createState() => _CommentSectionState();
@@ -30,8 +35,8 @@ class _CommentSectionState extends ConsumerState<CommentSection> {
   final _controller = TextEditingController();
   final _mentioned = <String>{};
 
-  CommentSectionKey get _key =>
-      CommentSectionKey(postId: widget.postId, postOwnerId: widget.postOwnerId);
+  CommentSectionKey get _key => CommentSectionKey(
+      targetType: widget.targetType, targetId: widget.targetId, targetOwnerId: widget.targetOwnerId);
 
   @override
   void dispose() {
@@ -90,7 +95,7 @@ class _CommentSectionState extends ConsumerState<CommentSection> {
           ...state.topLevel.map(
             (c) => _CommentTile(
               comment: c,
-              postOwnerId: widget.postOwnerId,
+              targetOwnerId: widget.targetOwnerId,
               myId: myId,
               sectionKey: _key,
             ),
@@ -102,14 +107,14 @@ class _CommentSectionState extends ConsumerState<CommentSection> {
 
 class _CommentTile extends ConsumerWidget {
   final Comment comment;
-  final String postOwnerId;
+  final String targetOwnerId;
   final String? myId;
   final CommentSectionKey sectionKey;
   final String? parentId;
 
   const _CommentTile({
     required this.comment,
-    required this.postOwnerId,
+    required this.targetOwnerId,
     required this.myId,
     required this.sectionKey,
     this.parentId,
@@ -204,13 +209,13 @@ class _CommentTile extends ConsumerWidget {
                 children: [
                   ...replies.map((r) => _CommentTile(
                         comment: r,
-                        postOwnerId: postOwnerId,
+                        targetOwnerId: targetOwnerId,
                         myId: myId,
                         sectionKey: sectionKey,
                         parentId: comment.id,
                       )),
                   _ReplyBox(
-                    postOwnerId: postOwnerId,
+                    targetOwnerId: targetOwnerId,
                     parentCommentId: comment.id,
                     sectionKey: sectionKey,
                     replyToUserId: comment.authorId,
@@ -225,7 +230,7 @@ class _CommentTile extends ConsumerWidget {
 }
 
 class _ReplyBox extends ConsumerStatefulWidget {
-  final String postOwnerId;
+  final String targetOwnerId;
   final String parentCommentId;
   final CommentSectionKey sectionKey;
 
@@ -235,7 +240,7 @@ class _ReplyBox extends ConsumerStatefulWidget {
   final String replyToUserId;
 
   const _ReplyBox({
-    required this.postOwnerId,
+    required this.targetOwnerId,
     required this.parentCommentId,
     required this.sectionKey,
     required this.replyToUserId,

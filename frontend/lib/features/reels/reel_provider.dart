@@ -73,6 +73,16 @@ class ReelFeedNotifier extends StateNotifier<ReelFeedState> {
       state = state.copyWith(loadingMore: false);
     }
   }
+
+  /// Splices a freshly-fetched [Reel] (e.g. after a view/share count bump)
+  /// back into the currently-loaded list by id — without this, a mutation
+  /// that only fires a backend call and discards the response (as `view()`
+  /// used to) never shows up on screen until the next full `refresh()`.
+  void updateReel(Reel updated) {
+    state = state.copyWith(
+      reels: [for (final r in state.reels) r.id == updated.id ? updated : r],
+    );
+  }
 }
 
 final reelFeedProvider = StateNotifierProvider<ReelFeedNotifier, ReelFeedState>(
@@ -92,7 +102,10 @@ class ReelActions {
     return reel;
   }
 
-  Future<void> view(String id) => _repository.view(id);
+  Future<void> view(String id) async {
+    final updated = await _repository.view(id);
+    _ref.read(reelFeedProvider.notifier).updateReel(updated);
+  }
 
   Future<void> delete(String id) => _repository.delete(id);
 }
@@ -103,3 +116,12 @@ final reelsByAuthorProvider =
     FutureProvider.family<PageResponse<Reel>, String>((ref, authorId) {
   return ref.read(reelRepositoryProvider).byAuthor(authorId);
 });
+
+/// Per-reel mute state, shared between [ReelVideoPlayer] (which used to
+/// own this as private State and render its own separate mute icon,
+/// floating at a slightly different corner offset than the action column
+/// next to it) and the action column's mute button — one shared piece of
+/// state so there's a single icon in a single column instead of two
+/// competing overlays. Starts muted, matching autoplaying-video convention
+/// (TikTok/Instagram Reels all default to muted until tapped).
+final reelMutedProvider = StateProvider.family<bool, String>((ref, reelId) => true);

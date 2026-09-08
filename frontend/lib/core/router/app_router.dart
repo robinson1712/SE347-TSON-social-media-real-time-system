@@ -17,6 +17,7 @@ import '../../features/posts/post_detail_page.dart';
 import '../../features/profile/friends_page.dart';
 import '../../features/profile/profile_page.dart';
 import '../../features/reels/reels_feed_page.dart';
+import '../../features/saved/saved_page.dart';
 import '../../features/search/search_results_page.dart';
 import '../../shared/widgets/app_shell.dart';
 
@@ -106,6 +107,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/reels', builder: (context, state) => const ReelsFeedPage()),
           GoRoute(path: '/dating', builder: (context, state) => const DatingHomePage()),
+          GoRoute(path: '/saved', builder: (context, state) => const SavedPage()),
           GoRoute(path: '/chat', builder: (context, state) => const ChatSplitPage()),
           GoRoute(
             path: '/chat/:id',

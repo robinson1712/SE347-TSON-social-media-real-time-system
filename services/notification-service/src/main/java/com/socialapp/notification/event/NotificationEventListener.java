@@ -38,11 +38,12 @@ public class NotificationEventListener {
 
     @KafkaListener(topics = KafkaTopics.COMMENT_CREATED, groupId = "${spring.kafka.consumer.group-id}")
     public void onCommentCreated(CommentCreatedEvent event) {
-        if (event.authorId().equals(event.postOwnerId())) {
+        if (event.authorId().equals(event.targetOwnerId())) {
             return;
         }
-        notificationService.createAndPush(event.postOwnerId(), event.authorId(), NotificationType.COMMENT,
-                "POST", event.postId(), "Someone commented on your post");
+        notificationService.createAndPush(event.targetOwnerId(), event.authorId(), NotificationType.COMMENT,
+                event.targetType(), event.targetId(),
+                "Someone commented on your " + event.targetType().toLowerCase());
     }
 
     @KafkaListener(topics = KafkaTopics.REACTION, groupId = "${spring.kafka.consumer.group-id}")

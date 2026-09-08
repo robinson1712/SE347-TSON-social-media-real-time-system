@@ -9,6 +9,7 @@ import com.socialapp.common.exception.ForbiddenException;
 import com.socialapp.common.exception.ResourceNotFoundException;
 import com.socialapp.common.moderation.ProfanityFilter;
 import com.socialapp.common.security.CurrentUserContext;
+import com.socialapp.post.client.ReelClient;
 import com.socialapp.post.client.UserServiceClient;
 import com.socialapp.post.dto.CreatePostRequest;
 import com.socialapp.post.dto.ShareRequest;
@@ -35,6 +36,7 @@ public class PostService {
     private final PostRepository postRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final UserServiceClient userServiceClient;
+    private final ReelClient reelClient;
 
     public Post createPost(CreatePostRequest request) {
         boolean hasContent = request.content() != null && !request.content().isBlank();
@@ -210,6 +212,38 @@ public class PostService {
 
         original.setShareCount(original.getShareCount() + 1);
         postRepository.save(original);
+
+        PostCreatedEvent event = new PostCreatedEvent(
+                saved.getId(), saved.getAuthorId(), saved.getGroupId(), saved.getPageId(),
+                saved.getPrivacy().name(), Instant.now());
+        kafkaTemplate.send(KafkaTopics.POST_CREATED, saved.getId(), event);
+
+        return saved;
+    }
+
+    /** Share/repost a reel as a new post — reels have no privacy concept (see
+     * reels-service's ReelController: every reel is public), so unlike
+     * sharePost there's no canView gate here. */
+    public Post shareReel(String reelId, ShareRequest request) {
+        if (reelId == null || reelId.isBlank()) {
+            throw new BadRequestException("reelId is required");
+        }
+        String currentUserId = CurrentUserContext.getUserId();
+        if (request.content() != null) {
+            rejectIfProfane(request.content());
+        }
+        Privacy privacy = request.privacy() != null ? request.privacy() : Privacy.PUBLIC;
+        validatePrivacyAudience(privacy, Collections.emptyList());
+
+        Post share = Post.builder()
+                .authorId(currentUserId)
+                .content(request.content())
+                .privacy(privacy)
+                .sharedReelId(reelId)
+                .build();
+        Post saved = postRepository.save(share);
+
+        reelClient.incrementShareCount(reelId);
 
         PostCreatedEvent event = new PostCreatedEvent(
                 saved.getId(), saved.getAuthorId(), saved.getGroupId(), saved.getPageId(),

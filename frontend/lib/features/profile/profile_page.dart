@@ -246,6 +246,15 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = <Widget>[];
+    if (profile.bio != null && profile.bio!.isNotEmpty) {
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(profile.bio!),
+      ));
+    }
+    if (profile.workplace != null && profile.workplace!.isNotEmpty) {
+      rows.add(_InfoRow(icon: Icons.work_outline, text: profile.workplace!));
+    }
     if (profile.location != null && profile.location!.isNotEmpty) {
       rows.add(_InfoRow(icon: Icons.home_outlined, text: 'Sống ở ${profile.location}'));
     }

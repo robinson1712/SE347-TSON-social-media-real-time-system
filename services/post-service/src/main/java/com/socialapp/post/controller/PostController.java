@@ -90,6 +90,12 @@ public class PostController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Post shared", shared));
     }
 
+    @PostMapping("/share-reel/{reelId}")
+    public ResponseEntity<ApiResponse<Post>> shareReel(@PathVariable String reelId, @RequestBody ShareRequest request) {
+        Post shared = postService.shareReel(reelId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Reel shared", shared));
+    }
+
     @GetMapping("/group/{groupId}")
     public ResponseEntity<ApiResponse<PageResponse<Post>>> getByGroup(
             @PathVariable String groupId,

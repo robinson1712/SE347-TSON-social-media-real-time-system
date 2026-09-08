@@ -14,6 +14,8 @@ import '../../features/posts/post_provider.dart';
 import '../../features/posts/share_dialog.dart';
 import '../../features/reactions/reaction_picker.dart';
 import '../../features/reactions/reaction_provider.dart';
+import '../../features/reels/reel_repository.dart';
+import '../../features/saved/saved_provider.dart';
 import 'post_content_text.dart';
 import 'privacy_badge.dart';
 import 'user_inline.dart';
@@ -150,9 +152,12 @@ class _PostCardState extends ConsumerState<PostCard> {
               const SizedBox(height: 10),
               _MediaGrid(urls: post.mediaUrls),
             ],
-            if (post.isShare) ...[
+            if (post.sharedPostId != null) ...[
               const SizedBox(height: 10),
               _SharedPostPreview(sharedPostId: post.sharedPostId!),
+            ] else if (post.sharedReelId != null) ...[
+              const SizedBox(height: 10),
+              _SharedReelPreview(sharedReelId: post.sharedReelId!),
             ],
             const SizedBox(height: 6),
             Row(
@@ -202,11 +207,17 @@ class _PostCardState extends ConsumerState<PostCard> {
                     label: const Text('Chia sẻ'),
                   ),
                 ),
+                Expanded(
+                  child: _SaveButton(
+                    saveKey: SaveKey(targetType: TargetType.post, targetId: post.id),
+                    targetOwnerId: post.authorId,
+                  ),
+                ),
               ],
             ),
             if (_showComments) ...[
               const Divider(height: 16),
-              CommentSection(postId: post.id, postOwnerId: post.authorId),
+              CommentSection(targetId: post.id, targetOwnerId: post.authorId),
             ],
           ],
         ),
@@ -361,3 +372,84 @@ final _sharedPostProvider = FutureProvider.family((ref, String id) async {
     return null;
   }
 });
+
+class _SharedReelPreview extends ConsumerWidget {
+  final String sharedReelId;
+
+  const _SharedReelPreview({required this.sharedReelId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncReel = ref.watch(_sharedReelProvider(sharedReelId));
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFDADDE1)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: asyncReel.when(
+        data: (reel) {
+          if (reel == null) {
+            return const Text('Reel gốc không còn khả dụng', style: TextStyle(color: Colors.grey));
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UserInline(userId: reel.authorId, avatarRadius: 14),
+              const SizedBox(height: 6),
+              InkWell(
+                onTap: () => context.push('/reels'),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 160,
+                  width: double.infinity,
+                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+                  child: const Center(child: Icon(Icons.play_circle_fill, color: Colors.white, size: 40)),
+                ),
+              ),
+              if (reel.caption != null && reel.caption!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(reel.caption!),
+              ],
+            ],
+          );
+        },
+        loading: () => const SizedBox(
+            height: 40,
+            child: Center(
+                child: SizedBox(
+                    height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))),
+        error: (_, __) => const Text('Không tải được reel gốc', style: TextStyle(color: Colors.grey)),
+      ),
+    );
+  }
+}
+
+final _sharedReelProvider = FutureProvider.family((ref, String id) async {
+  try {
+    return await ref.read(reelRepositoryProvider).getById(id);
+  } catch (_) {
+    return null;
+  }
+});
+
+/// Facebook-style "Lưu" (save/bookmark) button — shared by posts
+/// (post_card.dart) and reels (reels_feed_page.dart), backed by the generic
+/// SavedItem feature in reaction-service (see saved_provider.dart).
+class _SaveButton extends ConsumerWidget {
+  final SaveKey saveKey;
+  final String targetOwnerId;
+
+  const _SaveButton({required this.saveKey, required this.targetOwnerId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final saved = ref.watch(savedProvider(saveKey));
+    return TextButton.icon(
+      onPressed: () => ref.read(savedProvider(saveKey).notifier).toggle(targetOwnerId: targetOwnerId),
+      icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border, size: 18),
+      label: Text(saved ? 'Đã lưu' : 'Lưu'),
+    );
+  }
+}

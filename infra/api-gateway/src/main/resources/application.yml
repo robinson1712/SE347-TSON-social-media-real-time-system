@@ -69,7 +69,7 @@ spring:
         - id: reaction-service
           uri: lb://REACTION-SERVICE
           predicates:
-            - Path=/api/reactions/**
+            - Path=/api/reactions/**,/api/saved/**
           filters:
             - name: RequestRateLimiter
               args:

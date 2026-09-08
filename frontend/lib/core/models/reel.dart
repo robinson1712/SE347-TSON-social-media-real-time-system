@@ -8,6 +8,7 @@ class Reel {
   final int viewCount;
   final int commentCount;
   final int reactionCount;
+  final int shareCount;
   final DateTime? createdAt;
 
   const Reel({
@@ -19,6 +20,7 @@ class Reel {
     this.viewCount = 0,
     this.commentCount = 0,
     this.reactionCount = 0,
+    this.shareCount = 0,
     this.createdAt,
   });
 
@@ -31,6 +33,7 @@ class Reel {
         viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
         commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
         reactionCount: (json['reactionCount'] as num?)?.toInt() ?? 0,
+        shareCount: (json['shareCount'] as num?)?.toInt() ?? 0,
         createdAt: json['createdAt'] == null
             ? null
             : DateTime.tryParse(json['createdAt'] as String),
